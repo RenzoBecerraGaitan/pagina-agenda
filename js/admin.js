@@ -32,11 +32,84 @@ let todosLosEventos = [];
 async function obtenerTokenValido() {
   const user = auth.currentUser;
   if (!user) {
-    throw new Error("No hay una sesión de usuario activa.");
+    const error = new Error(
+      "No hay una sesión de usuario activa. Volvé a iniciar sesión.",
+    );
+    error.code = "auth/no-user";
+    throw error;
   }
+
   // Forzar actualización del token para que las reglas de Firestore reciban request.auth.token.email
-  await user.getIdToken(true);
+  try {
+    await user.getIdToken(true);
+  } catch (tokenError) {
+    console.error(
+      "[admin] Error al renovar el token:",
+      tokenError.code,
+      tokenError.message,
+    );
+    throw tokenError;
+  }
+
+  // Diagnóstico temporal: email del perfil, uid y email del claim del token
+  try {
+    const tokenResult = await user.getIdTokenResult();
+    console.log("[admin] Diagnóstico de sesión", {
+      emailPerfil: user.email,
+      uid: user.uid,
+      emailEnToken: tokenResult.claims.email,
+      emailCoincide: tokenResult.claims.email === user.email,
+      esAdminSegunReglas:
+        tokenResult.claims.email === "renzobecerragaitan@gmail.com" ||
+        tokenResult.claims.email === "cerezoli387@gmail.com",
+      mismaInstanciaApp: auth.app.name === db.app.name,
+      appName: auth.app.name,
+    });
+  } catch (diagError) {
+    console.warn("[admin] No se pudo leer getIdTokenResult():", diagError);
+  }
+
   return user;
+}
+
+/**
+ * Traduce los errores de Firebase a un mensaje entendible para el admin.
+ * Distingue permission-denied, not-found y los errores de autenticación (auth/*).
+ */
+function describirErrorAdmin(error, accion) {
+  const code = error && error.code ? error.code : "desconocido";
+  const message = error && error.message ? error.message : String(error);
+
+  let explicacion;
+  if (code === "permission-denied") {
+    explicacion =
+      "Permiso denegado por las reglas de Firestore. " +
+      "Verificá que el correo con el que iniciaste sesión sea uno de los administradores " +
+      "(renzobecerragaitan@gmail.com o cerezoli387@gmail.com) y que las reglas publicadas " +
+      "incluyan ese correo.";
+  } else if (code === "not-found") {
+    explicacion =
+      "El evento no existe en Firestore. Probablemente el listado mostrado provenía de los " +
+      "datos de demostración locales (IDs ev_adm_*). Recargá el panel para traer los eventos reales.";
+  } else if (code === "unauthenticated") {
+    explicacion =
+      "No hay una sesión de autenticación válida o el token expiró. Volvé a iniciar sesión.";
+  } else if (typeof code === "string" && code.startsWith("auth/")) {
+    explicacion = "Error de autenticación.";
+  } else if (code === "failed-precondition" || code === "aborted") {
+    explicacion =
+      "La operación fue rechazada por el servidor. Probablemente un problema de App Check " +
+      "o de concurrencia. Reintentá en unos segundos.";
+  } else if (code === "unavailable") {
+    explicacion = "Firestore no está disponible en este momento. Revisá tu conexión.";
+  } else if (code === "deadline-exceeded") {
+    explicacion = "La operación superó el tiempo de espera. Reintentá.";
+  } else {
+    explicacion = "Revisá la consola del navegador para más detalle.";
+  }
+
+  console.error(`[admin] Error al ${accion}:`, code, message, error);
+  return `Error al ${accion} [${code}]: ${explicacion}\n\nDetalle: ${message}`;
 }
 
 /**
@@ -52,8 +125,7 @@ export async function aprobarEvento(id) {
     }
     await cargarYRenderizarEventos();
   } catch (error) {
-    console.error("Error al aprobar evento:", error);
-    alert(`Error al aprobar el evento: ${error.message}`);
+    alert(describirErrorAdmin(error, "aprobar el evento"));
   }
 }
 
@@ -70,8 +142,7 @@ export async function rechazarEvento(id) {
     }
     await cargarYRenderizarEventos();
   } catch (error) {
-    console.error("Error al rechazar evento:", error);
-    alert(`Error al rechazar el evento: ${error.message}`);
+    alert(describirErrorAdmin(error, "rechazar el evento"));
   }
 }
 
@@ -89,9 +160,33 @@ export async function alternarDestacado(id, valorActual) {
     }
     await cargarYRenderizarEventos();
   } catch (error) {
-    console.error("Error al alternar destacado:", error);
-    alert(`Error al cambiar destacado: ${error.message}`);
+    alert(describirErrorAdmin(error, "cambiar el destacado"));
   }
+}
+
+/**
+ * Extrae el path real del objeto en Storage a partir de una URL de descarga.
+ * `ref(storage, "https://.../o/eventos%2Fimg.jpg")` es inválido en Firebase Storage
+ * (error storage/invalid-argument), hay que pasar solo "eventos/img.jpg".
+ */
+function extraerPathStorage(imagenUrl) {
+  if (!imagenUrl || typeof imagenUrl !== "string") return null;
+  if (imagenUrl.startsWith("gs://")) {
+    const resto = imagenUrl.slice("gs://".length);
+    const slashIndex = resto.indexOf("/");
+    return slashIndex === -1 ? null : resto.slice(slashIndex + 1);
+  }
+  const match = imagenUrl.match(/\/o\/(.+)$/);
+  if (match) {
+    // Se descarta el query string (?alt=media&token=...) que no forma parte del path
+    const path = match[1].split("?")[0];
+    try {
+      return decodeURIComponent(path);
+    } catch (e) {
+      return path;
+    }
+  }
+  return null;
 }
 
 /**
@@ -106,15 +201,16 @@ export async function eliminarEvento(id, imagenUrl) {
   try {
     if (firebaseConfig.apiKey) {
       await obtenerTokenValido();
-      if (
-        imagenUrl &&
-        (imagenUrl.includes("firebasestorage.googleapis.com") ||
-          imagenUrl.startsWith("gs://"))
-      ) {
+      const pathStorage = extraerPathStorage(imagenUrl);
+      if (pathStorage) {
         try {
-          await deleteObject(ref(storage, imagenUrl));
+          await deleteObject(ref(storage, pathStorage));
         } catch (storageErr) {
-          console.warn("No se pudo eliminar la imagen de Storage:", storageErr);
+          console.warn(
+            `[admin] No se pudo eliminar la imagen de Storage (${pathStorage}):`,
+            storageErr.code,
+            storageErr.message,
+          );
         }
       }
       await deleteDoc(doc(db, "eventos", id));
@@ -125,8 +221,7 @@ export async function eliminarEvento(id, imagenUrl) {
     alert("Evento eliminado permanentemente.");
     await cargarYRenderizarEventos();
   } catch (error) {
-    console.error("Error al eliminar evento:", error);
-    alert(`Error al eliminar el evento: ${error.message}`);
+    alert(describirErrorAdmin(error, "eliminar el evento"));
   }
 }
 
@@ -134,6 +229,20 @@ window.aprobarEvento = aprobarEvento;
 window.rechazarEvento = rechazarEvento;
 window.alternarDestacado = alternarDestacado;
 window.eliminarEvento = eliminarEvento;
+
+/**
+ * Muestra un error visible dentro del listado del panel admin
+ */
+function mostrarErrorEnPanel(adminList, mensaje) {
+  if (!adminList) return;
+  adminList.innerHTML = `
+    <div class="no-events" style="text-align: center; padding: 2.5rem; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: var(--radius);">
+      <i class="fa-solid fa-triangle-exclamation" style="font-size: 2.5rem; margin-bottom: 0.75rem; color: var(--danger);"></i>
+      <h3 style="margin-bottom: 0.25rem;">No se pudieron cargar los eventos</h3>
+      <p style="color: var(--text-muted); font-size: 0.9rem; white-space: pre-line;">${mensaje}</p>
+    </div>
+  `;
+}
 
 /**
  * Carga eventos desde Firestore (o fallback local) y actualiza contadores y render
@@ -153,7 +262,27 @@ export async function cargarYRenderizarEventos() {
       todosLosEventos = obtenerEventosLocales();
     }
   } catch (err) {
-    console.error("Error al obtener eventos de Firestore:", err);
+    console.error("[admin] Error al obtener eventos de Firestore:", err);
+    if (firebaseConfig.apiKey) {
+      // Con credenciales configuradas NO se usan datos de demostración:
+      // sus IDs (ev_adm_*) no existen en Firestore y provocaban errores not-found al aprobar.
+      const code = err && err.code ? err.code : "desconocido";
+      const detalle = err && err.message ? err.message : String(err);
+      todosLosEventos = [];
+      mostrarErrorEnPanel(
+        adminList,
+        `No se pudo leer la colección "eventos" de Firestore.\n` +
+          `Código: ${code}\n${detalle}\n\n` +
+          `Revisá las reglas de Firestore y tu conexión, luego recargá el panel.`,
+      );
+      const countPendientes = document.getElementById("count-pendientes");
+      const countActivos = document.getElementById("count-activos");
+      const countHistorial = document.getElementById("count-historial");
+      if (countPendientes) countPendientes.textContent = 0;
+      if (countActivos) countActivos.textContent = 0;
+      if (countHistorial) countHistorial.textContent = 0;
+      return;
+    }
     todosLosEventos = obtenerEventosLocales();
   }
 
@@ -181,6 +310,28 @@ export async function cargarYRenderizarEventos() {
   if (pestañaActiva === "historial") listaFiltrada = historial;
 
   renderizarListadoAdmin(listaFiltrada, adminList, pestañaActiva);
+}
+
+/**
+ * Convierte un valor en un literal JS de comillas simples apto para embeberlo
+ * dentro de un atributo HTML onclick.
+ * Primero se escapa para JS (backslash, comilla simple, saltos de línea) y luego
+ * se escapan las entidades HTML (& " < >), porque dentro de un atributo delimitado
+ * por comillas dobles un \" NO protege la comilla: cortaría el atributo.
+ */
+function literalAtributo(valor) {
+  const texto = valor === null || valor === undefined ? "" : String(valor);
+  const escapadoJs = texto
+    .replace(/\\/g, "\\\\")
+    .replace(/'/g, "\\'")
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "\\r");
+  const escapadoHtml = escapadoJs
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  return `'${escapadoHtml}'`;
 }
 
 function renderizarListadoAdmin(eventos, contenedor, tab) {
@@ -218,7 +369,10 @@ function renderizarListadoAdmin(eventos, contenedor, tab) {
         ev.imagenUrl ||
         "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=600&q=80";
       const esDestacado = Boolean(ev.destacado);
-      const escapeImgUrl = (ev.imagenUrl || "").replace(/'/g, "\\'");
+      // Serialización segura para embeber IDs/URLs dentro de atributos onclick:
+      // se escapan las entidades HTML y se usan comillas simples para el literal JS.
+      const idLiteral = literalAtributo(ev.id);
+      const imagenLiteral = literalAtributo(ev.imagenUrl || "");
 
       return `
         <div class="admin-item" style="border-left: 4px solid ${
@@ -256,7 +410,7 @@ function renderizarListadoAdmin(eventos, contenedor, tab) {
             <button
               class="btn btn-sm ${esDestacado ? "btn-primary" : "btn-outline"}"
               style="${esDestacado ? "background-color: var(--warning); border-color: var(--warning);" : ""}"
-              onclick="alternarDestacado('${ev.id}', ${esDestacado})"
+              onclick="alternarDestacado(${idLiteral}, ${esDestacado})"
               title="Alternar evento destacado"
             >
               <i class="fa-${esDestacado ? "solid" : "regular"} fa-star"></i>
@@ -269,7 +423,7 @@ function renderizarListadoAdmin(eventos, contenedor, tab) {
                 ? `
               <button
                 class="btn btn-primary btn-sm"
-                onclick="aprobarEvento('${ev.id}')"
+                onclick="aprobarEvento(${idLiteral})"
               >
                 <i class="fa-solid fa-check"></i> Aprobar
               </button>
@@ -284,7 +438,7 @@ function renderizarListadoAdmin(eventos, contenedor, tab) {
               <button
                 class="btn btn-outline btn-sm"
                 style="color: var(--warning); border-color: var(--warning);"
-                onclick="rechazarEvento('${ev.id}')"
+                onclick="rechazarEvento(${idLiteral})"
               >
                 <i class="fa-solid fa-ban"></i> Rechazar
               </button>
@@ -295,7 +449,7 @@ function renderizarListadoAdmin(eventos, contenedor, tab) {
             <!-- Botón Eliminar permanentemente -->
             <button
               class="btn btn-danger btn-sm"
-              onclick="eliminarEvento('${ev.id}', '${escapeImgUrl}')"
+              onclick="eliminarEvento(${idLiteral}, ${imagenLiteral})"
             >
               <i class="fa-solid fa-trash"></i> Eliminar
             </button>
