@@ -1,21 +1,29 @@
 // Panel de Control y Administración de Eventos (/admin)
 import { db, storage, auth, firebaseConfig } from "./firebase-config.js";
-import { loginWithGoogle, logout, handleRedirectResult } from "./auth.js";
+import { googleProvider } from "./auth.js";
 import {
+  signInWithPopup,
+  signOut,
   onAuthStateChanged,
-  getRedirectResult
+  setPersistence,
+  browserLocalPersistence
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import {
   collection,
   getDocs,
   doc,
   updateDoc,
-  deleteDoc,
+  deleteDoc
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import {
   ref,
-  deleteObject,
+  deleteObject
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+
+// Configuración explícita de persistencia en localStorage para evitar bucles o pérdida de sesión
+setPersistence(auth, browserLocalPersistence).catch((err) => {
+  console.warn("Aviso al inicializar browserLocalPersistence en admin:", err);
+});
 
 let pestañaActiva = "pendientes";
 let todosLosEventos = [];
@@ -400,9 +408,10 @@ function limpiarAlertaAuth() {
 }
 
 /**
- * Iniciar sesión con Google para el panel de administración usando signInWithRedirect
+ * Manejador del click directo del botón de inicio de sesión de Google
+ * Usa signInWithPopup y maneja auth/popup-blocked
  */
-export async function iniciarSesionAdmin() {
+async function handleAdminLoginClick() {
   limpiarAlertaAuth();
   const btnLogin = document.getElementById("btn-admin-login");
   const originalHtml = btnLogin ? btnLogin.innerHTML : "";
@@ -410,7 +419,7 @@ export async function iniciarSesionAdmin() {
   try {
     if (btnLogin) {
       btnLogin.disabled = true;
-      btnLogin.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Redirigiendo a Google...`;
+      btnLogin.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Conectando...`;
     }
 
     if (!firebaseConfig.apiKey) {
@@ -421,7 +430,7 @@ export async function iniciarSesionAdmin() {
       if (simular) {
         localStorage.setItem("agenda_admin_demo_user", "renzobecerragaitan@gmail.com");
         await actualizarVistaAdminParaUsuario({
-          displayName: "Renzo Becerra",
+          displayName: "Renzo Becerra (Demo)",
           email: "renzobecerragaitan@gmail.com"
         });
         return;
@@ -435,38 +444,31 @@ export async function iniciarSesionAdmin() {
       }
     }
 
-    // Ejecutar redirección de Google
-    await loginWithGoogle();
+    // Asegurar persistencia local y abrir ventana emergente directamente en el gesto del usuario
+    await setPersistence(auth, browserLocalPersistence);
+    await signInWithPopup(auth, googleProvider);
+    // onAuthStateChanged es el único encargado de alternar la visibilidad entre Login y Dashboard
   } catch (error) {
-    console.error("Error al iniciar redirección con Google:", error);
-    mostrarAlertaAuth(`Error al autenticar: ${error.message}`);
+    console.error("Error al autenticar con Google:", error.code, error.message);
+    if (error.code === "auth/popup-blocked") {
+      mostrarAlertaAuth(
+        "La ventana emergente de inicio de sesión fue bloqueada por tu navegador. Por favor habilita los popups para este sitio en la configuración de tu navegador y vuelve a intentarlo."
+      );
+      alert(
+        "Tu navegador bloqueó la ventana emergente. Por favor habilita los popups para continuar con Google."
+      );
+    } else if (error.code === "auth/popup-closed-by-user") {
+      mostrarAlertaAuth("Inicio de sesión cancelado al cerrar la ventana emergente.");
+    } else if (error.code !== "auth/cancelled-popup-request") {
+      mostrarAlertaAuth(`Error al iniciar sesión: ${error.message}`);
+    }
+  } finally {
     if (btnLogin) {
       btnLogin.disabled = false;
       btnLogin.innerHTML = originalHtml;
     }
   }
 }
-
-/**
- * Cerrar sesión del panel de administración
- */
-export async function cerrarSesionAdmin() {
-  try {
-    localStorage.removeItem("agenda_admin_demo_user");
-    await logout();
-  } catch (e) {
-    console.error("Fallo al cerrar sesión:", e);
-  } finally {
-    const authGuard = document.getElementById("admin-auth-guard");
-    const dashboard = document.getElementById("admin-dashboard");
-    if (authGuard) authGuard.style.display = "block";
-    if (dashboard) dashboard.style.display = "none";
-    limpiarAlertaAuth();
-  }
-}
-
-window.iniciarSesionAdmin = iniciarSesionAdmin;
-window.cerrarSesionAdmin = cerrarSesionAdmin;
 
 async function actualizarVistaAdminParaUsuario(user) {
   const authGuard = document.getElementById("admin-auth-guard");
@@ -484,62 +486,57 @@ async function actualizarVistaAdminParaUsuario(user) {
   await cargarYRenderizarEventos();
 }
 
-async function initAdmin() {
+/**
+ * Inicialización del panel de administración
+ */
+function initAdmin() {
   const authGuard = document.getElementById("admin-auth-guard");
   const dashboard = document.getElementById("admin-dashboard");
   const btnLogin = document.getElementById("btn-admin-login");
   const btnLogout = document.getElementById("btn-admin-logout");
   const tabButtons = document.querySelectorAll(".tab-btn");
 
-  // Capturar resultado de redirección al regresar de Google
-  try {
-    const redirectUser = await getRedirectResult(auth);
-    if (redirectUser && redirectUser.user) {
-      console.log("Retorno de redirección exitoso en admin:", redirectUser.user.email);
-    }
-  } catch (error) {
-    console.error("Error al capturar getRedirectResult en admin:", error);
-    mostrarAlertaAuth(`Error al procesar la autenticación de Google: ${error.message}`);
-  }
-
-  // Enlazar botón login con Google
+  // 4. Vinculación del evento de inicio de sesión al botón únicamente mediante listener 'click' directo
   if (btnLogin) {
-    btnLogin.addEventListener("click", () => {
-      iniciarSesionAdmin();
-    });
+    btnLogin.addEventListener("click", handleAdminLoginClick);
   }
 
-  // Enlazar botón logout
+  // Vinculación al botón de cerrar sesión
   if (btnLogout) {
-    btnLogout.addEventListener("click", () => {
-      cerrarSesionAdmin();
+    btnLogout.addEventListener("click", async () => {
+      try {
+        localStorage.removeItem("agenda_admin_demo_user");
+        await signOut(auth);
+      } catch (e) {
+        console.error("Error al cerrar sesión:", e);
+      }
     });
   }
 
-  // Listener de autenticación con control de acceso por correo
+  // 3. onAuthStateChanged como el ÚNICO listener encargado de alternar la visibilidad
   onAuthStateChanged(auth, async (user) => {
     if (user) {
       const email = user.email || "";
       if (esUsuarioAdmin(email)) {
-        // Acceso permitido para administrador
+        // Usuario activo y ES administrador
         await actualizarVistaAdminParaUsuario(user);
       } else {
-        // Acceso denegado: el correo no pertenece a la lista de administradores
+        // Usuario autenticado pero NO es administrador
         if (dashboard) dashboard.style.display = "none";
         if (authGuard) authGuard.style.display = "block";
 
-        const mensaje = `Acceso denegado: El correo "${email}" no tiene permisos de administrador.`;
+        const mensaje = `Acceso denegado: El correo "${email}" no cuenta con permisos de administrador.`;
         mostrarAlertaAuth(mensaje);
-        alert(mensaje + "\nLa sesión será cerrada por seguridad.");
+        alert(mensaje + "\nCerrando sesión por seguridad.");
 
         try {
-          await logout();
+          await signOut(auth);
         } catch (e) {
           console.warn("Error al cerrar sesión no autorizada:", e);
         }
       }
     } else {
-      // Sin sesión activa
+      // No hay usuario activo: muestra la pantalla/botón de login
       const demoEmail = localStorage.getItem("agenda_admin_demo_user");
       if (!firebaseConfig.apiKey && demoEmail && esUsuarioAdmin(demoEmail)) {
         await actualizarVistaAdminParaUsuario({

@@ -1,12 +1,18 @@
 // Manejo de autenticación con Firebase (Google Auth)
 import {
   GoogleAuthProvider,
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithPopup,
   signOut,
-  onAuthStateChanged
+  onAuthStateChanged,
+  setPersistence,
+  browserLocalPersistence
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { auth } from "./firebase-config.js";
+
+// Configuración explícita de persistencia local en el almacenamiento del navegador
+setPersistence(auth, browserLocalPersistence).catch((err) => {
+  console.warn("Aviso al inicializar browserLocalPersistence:", err);
+});
 
 // Instancia del proveedor de Google con selector de cuenta
 export const googleProvider = new GoogleAuthProvider();
@@ -15,45 +21,35 @@ googleProvider.setCustomParameters({
 });
 
 /**
- * 1. Iniciar sesión con Google mediante redirección (signInWithRedirect)
- * Funciona de forma óptima en navegadores móviles y de escritorio evitando bloqueos de popups
+ * 1. Iniciar sesión con Google mediante ventana emergente (signInWithPopup)
+ * Evita la pérdida de estado y recarga completa de página.
+ * @returns {Promise<object>} Objeto de usuario autenticado
  */
 export async function loginWithGoogle() {
   try {
-    await signInWithRedirect(auth, googleProvider);
+    // Asegurar persistencia local antes de autenticar
+    await setPersistence(auth, browserLocalPersistence);
+    const result = await signInWithPopup(auth, googleProvider);
+    console.log("Inicio de sesión exitoso:", result.user);
+    return result.user;
   } catch (error) {
-    console.error("Error al iniciar sesión con Google:", error.code, error.message);
-    alert(`Error al iniciar sesión con Google: ${error.message}`);
-    throw error;
-  }
-}
-
-/**
- * 2. Captura el resultado de la redirección cuando el usuario regresa tras autenticarse
- * @param {Function} [callback] Función adicional opcional con los datos del usuario
- * @returns {Promise<object|null>} Objeto de usuario autenticado o null
- */
-export async function handleRedirectResult(callback) {
-  try {
-    const result = await getRedirectResult(auth);
-    if (result && result.user) {
-      console.log("Inicio de sesión por redirección exitoso:", result.user);
-      updateAuthDOM(result.user);
-      if (typeof callback === "function") {
-        callback(result.user);
-      }
-      return result.user;
+    console.error("Error al autenticar con Google:", error.code, error.message);
+    if (error.code === "auth/popup-blocked") {
+      alert(
+        "La ventana emergente de inicio de sesión fue bloqueada por tu navegador. Por favor habilita los popups para este sitio y vuelve a intentarlo."
+      );
+    } else if (
+      error.code !== "auth/popup-closed-by-user" &&
+      error.code !== "auth/cancelled-popup-request"
+    ) {
+      alert(`Error al iniciar sesión con Google: ${error.message}`);
     }
-    return null;
-  } catch (error) {
-    console.error("Error al procesar getRedirectResult:", error.code, error.message);
-    alert(`Error al procesar la autenticación de Google: ${error.message}`);
     throw error;
   }
 }
 
 /**
- * 3. Cerrar sesión del usuario actual
+ * 2. Cerrar sesión del usuario actual
  * @returns {Promise<void>}
  */
 export async function logout() {
@@ -92,7 +88,7 @@ export function updateAuthDOM(user) {
 }
 
 /**
- * 4. Listener del estado de autenticación (onAuthStateChanged)
+ * 3. Listener del estado de autenticación (onAuthStateChanged)
  * Escucha los cambios de sesión y actualiza el DOM automáticamente
  * @param {Function} [callback] Función adicional opcional a ejecutar cuando cambia el estado
  * @returns {Function} Función para cancelar la suscripción
@@ -106,23 +102,21 @@ export function initAuthListener(callback) {
   });
 }
 
-// Exponer en window para enlaces directos
+// Exponer en window para compatibilidad
 window.loginWithGoogle = loginWithGoogle;
-window.handleRedirectResult = handleRedirectResult;
 window.logout = logout;
 
-async function initAuthDOM() {
-  // Capturar retorno de redirección de Google
-  await handleRedirectResult();
-
-  // Configurar listener de estado de autenticación
+function initAuthDOM() {
+  // Configurar listener de estado de autenticación para páginas públicas
   initAuthListener();
 
-  // Enlazar botón de Google Auth si existe
+  // Enlazar botón de Google Auth directamente mediante evento click
   const btnGoogleAuth = document.getElementById("btn-google-auth");
   if (btnGoogleAuth) {
     btnGoogleAuth.addEventListener("click", () => {
-      loginWithGoogle();
+      loginWithGoogle().catch((err) => {
+        console.warn("Fallo o cancelación en login público:", err.message);
+      });
     });
   }
 
@@ -130,7 +124,9 @@ async function initAuthDOM() {
   const btnLogout = document.getElementById("btn-logout");
   if (btnLogout) {
     btnLogout.addEventListener("click", () => {
-      logout();
+      logout().catch((err) => {
+        console.warn("Error en logout público:", err.message);
+      });
     });
   }
 }
@@ -140,5 +136,6 @@ if (document.readyState === "loading") {
 } else {
   initAuthDOM();
 }
+
 
 
