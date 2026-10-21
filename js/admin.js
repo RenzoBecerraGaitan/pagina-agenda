@@ -10,10 +10,12 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import {
   collection,
-  getDocs,
   doc,
+  getDocs,
+  setDoc,
   updateDoc,
   deleteDoc,
+  serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import {
   ref,
@@ -27,6 +29,10 @@ setPersistence(auth, browserLocalPersistence).catch((err) => {
 
 let pestañaActiva = "pendientes";
 let todosLosEventos = [];
+// Mapa de autores por ID de evento: { [eventoId]: { uid, email, nombre, fechaCreacion } }
+let mapaAutores = {};
+// Mapa de autores bloqueados por UID: { [uid]: { email, motivo, bloqueadoPor, fecha } }
+export let mapaBloqueados = {};
 
 // Función auxiliar para garantizar un token de autenticación fresco
 async function obtenerTokenValido() {
@@ -214,6 +220,16 @@ export async function eliminarEvento(id, imagenUrl) {
         }
       }
       await deleteDoc(doc(db, "eventos", id));
+      // Mejor esfuerzo: borrar el registro del autor asociado, sin romper si falla
+      try {
+        await deleteDoc(doc(db, "autores", id));
+      } catch (autorErr) {
+        console.warn(
+          `[admin] No se pudo eliminar el registro del autor (autores/${id}):`,
+          autorErr.code,
+          autorErr.message
+        );
+      }
     } else {
       eliminarEventoLocal(id);
     }
@@ -225,10 +241,106 @@ export async function eliminarEvento(id, imagenUrl) {
   }
 }
 
+/**
+ * Bloquea o desbloquea a un autor de eventos.
+ * - Si el autor ya está bloqueado: lo desbloquea (deleteDoc en bloqueados/{uid}).
+ * - Si no está bloqueado: pide confirmación y motivo opcional, luego lo bloquea
+ *   (setDoc en bloqueados/{uid} con email, motivo, bloqueadoPor y fecha).
+ */
+export async function bloquearAutor(uid, email, nombre) {
+  try {
+    await obtenerTokenValido();
+
+    const yaBloqueado = !!mapaBloqueados[uid];
+
+    if (yaBloqueado) {
+      const confirmar = confirm(
+        `¿Deseás desbloquear al autor "${nombre}" (${email}) para que vuelva a publicar eventos?`
+      );
+      if (!confirmar) return;
+      await deleteDoc(doc(db, "bloqueados", uid));
+      alert("Autor desbloqueado. Puede volver a publicar eventos.");
+    } else {
+      const confirmar = confirm(
+        `¿Deseás bloquear al autor "${nombre}" (${email})? No podrá publicar más eventos.`
+      );
+      if (!confirmar) return;
+      const motivo = prompt("Motivo del bloqueo (opcional):") || "";
+      await setDoc(doc(db, "bloqueados", uid), {
+        email,
+        motivo,
+        bloqueadoPor: auth.currentUser.email,
+        fecha: serverTimestamp(),
+      });
+      alert("Autor bloqueado. No podrá publicar más eventos.");
+    }
+
+    await cargarYRenderizarEventos();
+  } catch (error) {
+    alert(describirErrorAdmin(error, yaBloqueado ? "desbloquear al autor" : "bloquear al autor"));
+  }
+}
+
+/**
+ * Renderiza la lista de autores bloqueados en la pestaña "Bloqueados".
+ */
+export function renderizarBloqueados(contenedor) {
+  const entradas = Object.entries(mapaBloqueados);
+  if (entradas.length === 0) {
+    contenedor.innerHTML = `
+      <div class="no-events" style="text-align: center; padding: 2.5rem; background: var(--surface); border: 1px dashed var(--border-color); border-radius: var(--radius);">
+        <i class="fa-solid fa-user-slash" style="font-size: 2.5rem; margin-bottom: 0.75rem; color: var(--text-muted);"></i>
+        <h3 style="margin-bottom: 0.25rem;">No hay autores bloqueados</h3>
+        <p style="color: var(--text-muted); font-size: 0.9rem;">Los autores bloqueados aparecerán aquí.</p>
+      </div>
+    `;
+    return;
+  }
+
+  contenedor.innerHTML = `
+    <div class="admin-list-bloqueados">
+      ${entradas
+        .map(([uid, data]) => {
+          const fecha = data.fecha ? new Date(data.fecha).toLocaleString("es-AR") : "-";
+          const idLiteral = literalAtributo(uid);
+          return `
+            <div class="admin-item" style="border-left: 4px solid var(--danger); padding: 1rem; margin-bottom: 0.75rem; background: var(--surface); border-radius: var(--radius);">
+              <div>
+                <div style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.25rem;">
+                  <span class="badge" style="background: rgba(239, 68, 68, 0.15); color: var(--danger); text-transform: uppercase; font-weight: 700; font-size: 0.75rem;">
+                    Bloqueado
+                  </span>
+                </div>
+                <p style="font-size: 0.9rem; margin-bottom: 0.25rem;">
+                  <strong>Autor:</strong> ${data.nombre || data.email} (${data.email || "-"})
+                </p>
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.25rem;">
+                  <strong>Motivo:</strong> ${data.motivo || "Sin motivo especificado"}
+                </p>
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.25rem;">
+                  <strong>Bloqueado por:</strong> ${data.bloqueadoPor || "-"} | <strong>Fecha:</strong> ${fecha}
+                </p>
+                <button
+                  class="btn btn-outline btn-sm"
+                  style="color: var(--accent); border-color: var(--accent);"
+                  onclick="bloquearAutor(${idLiteral}, ${literalAtributo(data.email || "")}, ${literalAtributo(data.nombre || "")})"
+                >
+                  <i class="fa-solid fa-unlock"></i> Desbloquear
+                </button>
+              </div>
+            </div>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
 window.aprobarEvento = aprobarEvento;
 window.rechazarEvento = rechazarEvento;
 window.alternarDestacado = alternarDestacado;
 window.eliminarEvento = eliminarEvento;
+window.bloquearAutor = bloquearAutor;
 
 /**
  * Muestra un error visible dentro del listado del panel admin
@@ -258,6 +370,29 @@ export async function cargarYRenderizarEventos() {
       snapshot.forEach((docSnap) => {
         todosLosEventos.push({ id: docSnap.id, ...docSnap.data() });
       });
+
+      // Leer autores (indexados por ID de evento). Nunca rompe el panel si falla.
+      try {
+        mapaAutores = {};
+        const autoresSnap = await getDocs(collection(db, "autores"));
+        autoresSnap.forEach((d) => {
+          mapaAutores[d.id] = d.data();
+        });
+      } catch (autoresErr) {
+        console.error("[admin] Error al leer la colección 'autores':", autoresErr);
+      }
+
+      // Leer autores bloqueados (mapa por UID). Nunca rompe el panel si falla.
+      try {
+        mapaBloqueados = {};
+        const bloqueadosSnap = await getDocs(collection(db, "bloqueados"));
+        bloqueadosSnap.forEach((d) => {
+          const data = d.data();
+          if (data && data.uid) mapaBloqueados[data.uid] = data;
+        });
+      } catch (bloqueadosErr) {
+        console.error("[admin] Error al leer la colección 'bloqueados':", bloqueadosErr);
+      }
     } else {
       todosLosEventos = obtenerEventosLocales();
     }
@@ -300,14 +435,21 @@ export async function cargarYRenderizarEventos() {
   const countPendientes = document.getElementById("count-pendientes");
   const countActivos = document.getElementById("count-activos");
   const countHistorial = document.getElementById("count-historial");
+  const countBloqueados = document.getElementById("count-bloqueados");
 
   if (countPendientes) countPendientes.textContent = pendientes.length;
   if (countActivos) countActivos.textContent = activos.length;
   if (countHistorial) countHistorial.textContent = historial.length;
+  if (countBloqueados) countBloqueados.textContent = Object.keys(mapaBloqueados).length;
 
   let listaFiltrada = pendientes;
   if (pestañaActiva === "activos") listaFiltrada = activos;
   if (pestañaActiva === "historial") listaFiltrada = historial;
+
+  if (pestañaActiva === "bloqueados") {
+    renderizarBloqueados(adminList);
+    return;
+  }
 
   renderizarListadoAdmin(listaFiltrada, adminList, pestañaActiva);
 }
@@ -369,6 +511,11 @@ function renderizarListadoAdmin(eventos, contenedor, tab) {
         ev.imagenUrl ||
         "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=600&q=80";
       const esDestacado = Boolean(ev.destacado);
+      const autor = mapaAutores[ev.id];
+      const autorBloqueado = autor && !!mapaBloqueados[autor.uid];
+      const uidLiteral = autor ? literalAtributo(autor.uid) : "null";
+      const emailLiteral = autor ? literalAtributo(autor.email) : "null";
+      const nombreLiteral = autor ? literalAtributo(autor.nombre || "") : "null";
       // Serialización segura para embeber IDs/URLs dentro de atributos onclick:
       // se escapan las entidades HTML y se usan comillas simples para el literal JS.
       const idLiteral = literalAtributo(ev.id);
@@ -405,6 +552,15 @@ function renderizarListadoAdmin(eventos, contenedor, tab) {
               <p style="font-size: 0.82rem; color: var(--text-muted);">
                 📞 <strong>Contacto:</strong> ${ev.contacto || "No especificado"}
               </p>
+              ${autor
+                ? `<p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 0.25rem;">
+                      👤 <strong>Autor:</strong> ${autor.nombre || autor.email} (${autor.email})
+                      ${autorBloqueado ? ' <span class="badge" style="background: var(--danger); color: #fff;">Autor bloqueado</span>' : ""}
+                    </p>`
+                : `<p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 0.25rem;">
+                      👤 <strong>Autor:</strong> sin datos
+                    </p>`
+              }
             </div>
           </div>
 
@@ -444,6 +600,23 @@ function renderizarListadoAdmin(eventos, contenedor, tab) {
                 onclick="rechazarEvento(${idLiteral})"
               >
                 <i class="fa-solid fa-ban"></i> Rechazar
+              </button>
+            `
+                : ""
+            }
+
+            <!-- Botón Bloquear / Desbloquear autor (solo si se conoce el autor) -->
+            ${
+              autor
+                ? `
+              <button
+                class="btn btn-sm ${autorBloqueado ? "btn-outline" : "btn-danger"}"
+                style="${autorBloqueado ? "color: var(--accent); border-color: var(--accent);" : ""}"
+                onclick="bloquearAutor(${uidLiteral}, ${emailLiteral}, ${nombreLiteral})"
+                title="${autorBloqueado ? "Desbloquear autor" : "Bloquear autor"}"
+              >
+                <i class="fa-solid fa-${autorBloqueado ? "unlock" : "user-slash"}"></i>
+                ${autorBloqueado ? "Desbloquear" : "Bloquear autor"}
               </button>
             `
                 : ""

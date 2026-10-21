@@ -1,17 +1,18 @@
 // Lógica de carga, consulta y renderizado de eventos con Firebase Firestore y Storage
-import { db, storage, firebaseConfig } from "./firebase-config.js";
+import { db, storage, auth, firebaseConfig } from "./firebase-config.js";
 import {
   collection,
-  addDoc,
+  doc,
   getDocs,
   query,
   where,
-  serverTimestamp
+  serverTimestamp,
+  writeBatch
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import {
   ref,
   uploadBytes,
-  getDownloadURL
+  getDownloadURL,
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
 /**
@@ -34,13 +35,16 @@ export const LOCALIDADES_POR_ZONA = {
 
 /**
  * 1. Función para subir evento:
+ * - Exige que haya un usuario de Google autenticado (auth.currentUser).
  * - Valida que la imagen no supere los 2 MB y la sube a Firebase Storage.
  * - Valida que la localidad seleccionada pertenezca a la lista cerrada de la
  *   zona (ubicacion) ANTES de subir la imagen a Storage.
- * - Guarda los datos en la colección 'eventos' en Firestore con:
- *   nombre, descripcion, fecha, hora, lugar, direccion, localidad, contacto,
- *   imagenUrl, ubicacion ('sanrafael' o 'mendoza'), estado ('pendiente'),
- *   destacado (false) y fechaCreacion.
+ * - Guarda los datos en la colección 'eventos' en Firestore y crea el registro
+ *   del autor en 'autores/{eventoId}' de forma atómica con writeBatch (un único
+ *   commit). El documento del evento NO guarda email ni uid.
+ * - Campos: nombre, descripcion, fecha, hora, lugar, direccion, localidad,
+ *   contacto, imagenUrl, ubicacion, estado ('pendiente'), destacado (false),
+ *   fechaCreacion.
  */
 export async function subirEvento({
   nombre,
@@ -52,8 +56,16 @@ export async function subirEvento({
   localidad,
   contacto,
   ubicacion,
-  imagenArchivo
+  imagenArchivo,
 }) {
+  // Exigir usuario autenticado
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error(
+      "Debes iniciar sesión con tu cuenta de Google para publicar un evento."
+    );
+  }
+
   if (!imagenArchivo) {
     throw new Error("Debe seleccionar una imagen para el evento.");
   }
@@ -63,12 +75,12 @@ export async function subirEvento({
   const localidadesValidas = LOCALIDADES_POR_ZONA[ubicacion];
   if (!localidadesValidas) {
     throw new Error(
-      `La zona "${ubicacion}" no es válida. Debe ser 'sanrafael' o 'mendoza'.`
+      `La zona "${ubicacion}" no es válida. Debe ser 'sanrafael' o 'mendoza'.`,
     );
   }
   if (!localidad || !localidadesValidas.includes(localidad)) {
     throw new Error(
-      `Debe seleccionar una localidad válida para la zona "${ubicacion}". Localidades permitidas: ${localidadesValidas.join(", ")}.`
+      `Debe seleccionar una localidad válida para la zona "${ubicacion}". Localidades permitidas: ${localidadesValidas.join(", ")}.`,
     );
   }
 
@@ -77,7 +89,7 @@ export async function subirEvento({
   if (imagenArchivo.size > MAX_SIZE_BYTES) {
     const tamanoMB = (imagenArchivo.size / (1024 * 1024)).toFixed(2);
     throw new Error(
-      `La imagen supera el límite de ${MAX_SIZE_MB} MB (tamaño: ${tamanoMB} MB). Elija una imagen más liviana.`
+      `La imagen supera el límite de ${MAX_SIZE_MB} MB (tamaño: ${tamanoMB} MB). Elija una imagen más liviana.`,
     );
   }
 
@@ -87,7 +99,8 @@ export async function subirEvento({
   const snapshot = await uploadBytes(storageRef, imagenArchivo);
   const imagenUrl = await getDownloadURL(snapshot.ref);
 
-  // Guardar datos en Firestore
+  // Generar ID del documento del evento y construir los datos (sin email/uid)
+  const eventoRef = doc(collection(db, "eventos"));
   const nuevoEvento = {
     nombre,
     descripcion,
@@ -101,11 +114,21 @@ export async function subirEvento({
     ubicacion, // 'sanrafael' o 'mendoza'
     estado: "pendiente",
     destacado: false,
-    fechaCreacion: serverTimestamp()
+    fechaCreacion: serverTimestamp(),
   };
 
-  const docRef = await addDoc(collection(db, "eventos"), nuevoEvento);
-  return { id: docRef.id, ...nuevoEvento };
+  // Escribir evento y autor de forma atómica en un único commit
+  const batch = writeBatch(db);
+  batch.set(eventoRef, nuevoEvento);
+  batch.set(doc(db, "autores", eventoRef.id), {
+    uid: user.uid,
+    email: user.email,
+    nombre: user.displayName || "",
+    fechaCreacion: serverTimestamp(),
+  });
+  await batch.commit();
+
+  return { id: eventoRef.id, ...nuevoEvento };
 }
 
 /**
@@ -121,7 +144,7 @@ export async function consultarEventosPublicos(ubicacion) {
       collection(db, "eventos"),
       where("estado", "==", "aprobado"),
       where("ubicacion", "==", ubicacion),
-      where("fecha", ">=", hoy)
+      where("fecha", ">=", hoy),
     );
 
     const snapshot = await getDocs(consulta);
@@ -141,7 +164,9 @@ export async function consultarEventosPublicos(ubicacion) {
   } catch (error) {
     console.error("Error al consultar eventos desde Firestore:", error);
     if (!firebaseConfig.apiKey) {
-      console.warn("Aviso: Configuración de Firebase en blanco. Usando datos locales de muestra.");
+      console.warn(
+        "Aviso: Configuración de Firebase en blanco. Usando datos locales de muestra.",
+      );
       return obtenerEventosDeMuestra(ubicacion, hoy);
     }
     throw error;
@@ -235,9 +260,10 @@ function obtenerEventosDeMuestra(ubicacion, fechaHoy) {
       direccion: "Av. Mitre 550",
       localidad: "San Rafael",
       contacto: "+54 9 260 4111111",
-      imagenUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=600&q=80",
+      imagenUrl:
+        "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=600&q=80",
       estado: "aprobado",
-      destacado: true
+      destacado: true,
     },
     {
       id: "ev_mza_1",
@@ -250,20 +276,25 @@ function obtenerEventosDeMuestra(ubicacion, fechaHoy) {
       direccion: "España y Maza",
       localidad: "Ciudad de Mendoza",
       contacto: "+54 9 261 4333333",
-      imagenUrl: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=600&q=80",
+      imagenUrl:
+        "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=600&q=80",
       estado: "aprobado",
-      destacado: true
-    }
+      destacado: true,
+    },
   ];
 
   return muestra
-    .filter((ev) => ev.ubicacion === ubicacion && ev.estado === "aprobado" && ev.fecha >= fechaHoy)
+    .filter(
+      (ev) =>
+        ev.ubicacion === ubicacion &&
+        ev.estado === "aprobado" &&
+        ev.fecha >= fechaHoy,
+    )
     .sort((a, b) => {
       if (a.destacado !== b.destacado) return a.destacado ? -1 : 1;
       return (a.fecha || "").localeCompare(b.fecha || "");
     });
 }
-
 
 /**
  * Carga en el <select id="event-locality"> las localidades permitidas para la
@@ -308,7 +339,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Cargar las localidades de la zona en el formulario de carga de eventos.
   poblarSelectLocalidades(
     ubicacionActual,
-    document.getElementById("event-locality")
+    document.getElementById("event-locality"),
   );
 
   async function cargarEventos() {
@@ -385,7 +416,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       const MAX_SIZE_MB = 2;
       if (imagenArchivo.size > MAX_SIZE_MB * 1024 * 1024) {
-        alert(`La imagen supera el límite de ${MAX_SIZE_MB} MB. Elige una imagen más liviana.`);
+        alert(
+          `La imagen supera el límite de ${MAX_SIZE_MB} MB. Elige una imagen más liviana.`,
+        );
         return;
       }
 
@@ -418,10 +451,12 @@ document.addEventListener("DOMContentLoaded", async () => {
           localidad,
           contacto,
           ubicacion: ubicacionActual,
-          imagenArchivo
+          imagenArchivo,
         });
 
-        alert("¡Evento enviado con éxito! Quedará pendiente de aprobación por el moderador.");
+        alert(
+          "¡Evento enviado con éxito! Quedará pendiente de aprobación por el moderador.",
+        );
         eventForm.reset();
 
         if (modalOverlay) {
@@ -429,7 +464,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
       } catch (error) {
         console.error("Error al subir el evento:", error);
-        alert(`Hubo un error al guardar el evento: ${error.message}`);
+        if (error && error.code === "permission-denied") {
+          alert("No tenés permiso para publicar eventos con esta cuenta.");
+        } else {
+          alert(`Hubo un error al guardar el evento: ${error.message}`);
+        }
       } finally {
         if (btnSubmit) {
           btnSubmit.disabled = false;
@@ -439,4 +478,3 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 });
-
