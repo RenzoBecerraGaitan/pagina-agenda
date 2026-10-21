@@ -6,18 +6,18 @@ import {
   signOut,
   onAuthStateChanged,
   setPersistence,
-  browserLocalPersistence
+  browserLocalPersistence,
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import {
   collection,
   getDocs,
   doc,
   updateDoc,
-  deleteDoc
+  deleteDoc,
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import {
   ref,
-  deleteObject
+  deleteObject,
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
 // Configuración explícita de persistencia en localStorage para evitar bucles o pérdida de sesión
@@ -28,12 +28,24 @@ setPersistence(auth, browserLocalPersistence).catch((err) => {
 let pestañaActiva = "pendientes";
 let todosLosEventos = [];
 
+// Función auxiliar para garantizar un token de autenticación fresco
+async function obtenerTokenValido() {
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error("No hay una sesión de usuario activa.");
+  }
+  // Forzar actualización del token para que las reglas de Firestore reciban request.auth.token.email
+  await user.getIdToken(true);
+  return user;
+}
+
 /**
  * 1. Aprobar evento: cambia el estado del evento a 'aprobado'
  */
 export async function aprobarEvento(id) {
   try {
     if (firebaseConfig.apiKey) {
+      await obtenerTokenValido(); // Valida y renueva el token antes de escribir
       await updateDoc(doc(db, "eventos", id), { estado: "aprobado" });
     } else {
       actualizarEventoLocal(id, { estado: "aprobado" });
@@ -51,6 +63,7 @@ export async function aprobarEvento(id) {
 export async function rechazarEvento(id) {
   try {
     if (firebaseConfig.apiKey) {
+      await obtenerTokenValido();
       await updateDoc(doc(db, "eventos", id), { estado: "rechazado" });
     } else {
       actualizarEventoLocal(id, { estado: "rechazado" });
@@ -69,6 +82,7 @@ export async function alternarDestacado(id, valorActual) {
   const nuevoValor = !valorActual;
   try {
     if (firebaseConfig.apiKey) {
+      await obtenerTokenValido();
       await updateDoc(doc(db, "eventos", id), { destacado: nuevoValor });
     } else {
       actualizarEventoLocal(id, { destacado: nuevoValor });
@@ -91,6 +105,7 @@ export async function eliminarEvento(id, imagenUrl) {
 
   try {
     if (firebaseConfig.apiKey) {
+      await obtenerTokenValido();
       if (
         imagenUrl &&
         (imagenUrl.includes("firebasestorage.googleapis.com") ||
@@ -425,17 +440,22 @@ async function handleAdminLoginClick() {
     if (!firebaseConfig.apiKey) {
       const simular = confirm(
         "Aviso: Las credenciales de Firebase en js/firebase-config.js están vacías.\n\n" +
-        "¿Deseas iniciar sesión como 'renzobecerragaitan@gmail.com' en modo prueba para ver el panel?"
+          "¿Deseas iniciar sesión como 'renzobecerragaitan@gmail.com' en modo prueba para ver el panel?",
       );
       if (simular) {
-        localStorage.setItem("agenda_admin_demo_user", "renzobecerragaitan@gmail.com");
+        localStorage.setItem(
+          "agenda_admin_demo_user",
+          "renzobecerragaitan@gmail.com",
+        );
         await actualizarVistaAdminParaUsuario({
           displayName: "Renzo Becerra (Demo)",
-          email: "renzobecerragaitan@gmail.com"
+          email: "renzobecerragaitan@gmail.com",
         });
         return;
       } else {
-        mostrarAlertaAuth("Debes completar las credenciales de Firebase en js/firebase-config.js para usar Google Auth.");
+        mostrarAlertaAuth(
+          "Debes completar las credenciales de Firebase en js/firebase-config.js para usar Google Auth.",
+        );
         if (btnLogin) {
           btnLogin.disabled = false;
           btnLogin.innerHTML = originalHtml;
@@ -452,13 +472,15 @@ async function handleAdminLoginClick() {
     console.error("Error al autenticar con Google:", error.code, error.message);
     if (error.code === "auth/popup-blocked") {
       mostrarAlertaAuth(
-        "La ventana emergente de inicio de sesión fue bloqueada por tu navegador. Por favor habilita los popups para este sitio en la configuración de tu navegador y vuelve a intentarlo."
+        "La ventana emergente de inicio de sesión fue bloqueada por tu navegador. Por favor habilita los popups para este sitio en la configuración de tu navegador y vuelve a intentarlo.",
       );
       alert(
-        "Tu navegador bloqueó la ventana emergente. Por favor habilita los popups para continuar con Google."
+        "Tu navegador bloqueó la ventana emergente. Por favor habilita los popups para continuar con Google.",
       );
     } else if (error.code === "auth/popup-closed-by-user") {
-      mostrarAlertaAuth("Inicio de sesión cancelado al cerrar la ventana emergente.");
+      mostrarAlertaAuth(
+        "Inicio de sesión cancelado al cerrar la ventana emergente.",
+      );
     } else if (error.code !== "auth/cancelled-popup-request") {
       mostrarAlertaAuth(`Error al iniciar sesión: ${error.message}`);
     }
@@ -541,7 +563,7 @@ function initAdmin() {
       if (!firebaseConfig.apiKey && demoEmail && esUsuarioAdmin(demoEmail)) {
         await actualizarVistaAdminParaUsuario({
           displayName: "Renzo Becerra (Demo)",
-          email: demoEmail
+          email: demoEmail,
         });
       } else {
         if (authGuard) authGuard.style.display = "block";
