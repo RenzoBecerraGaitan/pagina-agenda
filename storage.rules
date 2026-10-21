@@ -1,20 +1,26 @@
 rules_version = '2';
 
-service firebase.storage {
-  match /b/{bucket}/o {
+service cloud.firestore {
+  match /databases/{database}/documents {
 
-    // Reglas para imágenes y archivos dentro de la carpeta 'eventos'
-    match /eventos/{archivoId} {
-      // 1. Permitir lectura pública de imágenes
+    // Función para validar si el correo del usuario es Administrador
+    function isAdmin() {
+      return request.auth != null && (
+        request.auth.token.email.toLowerCase() == "renzobecerragaitan@gmail.com" ||
+        request.auth.token.email.toLowerCase() == "cerezoli387@gmail.com" // 
+      );
+    }
+
+    // Reglas para la colección 'eventos'
+    match /eventos/{eventoId} {
+      // 1. Lectura pública (cualquier visitante ve la web)
       allow read: if true;
 
-      // 2. Permitir subida solo a usuarios autenticados restringiendo el tamaño a un máximo de 2 MB
-      allow create: if request.auth != null
-                    && request.resource.size < 2 * 1024 * 1024
-                    && request.resource.contentType.matches('image/.*');
+      // 2. Creación permitida a cualquier usuario logueado con Google
+      allow create: if request.auth != null;
 
-      // 3. Permitir eliminación a usuarios autenticados (administradores al eliminar eventos)
-      allow delete: if request.auth != null;
+      // 3. Edición, aprobación y borrado PERMITIDO ÚNICAMENTE a los dos emails anteriores
+      allow update, delete: if isAdmin();
     }
   }
 }

@@ -15,11 +15,32 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
 /**
+ * Única fuente de verdad de las localidades permitidas por zona (body[data-location]).
+ * - La clave es la ZONA de la página: 'sanrafael' | 'mendoza'.
+ * - Los valores son los nombres exactos de las localidades (con tildes) que se
+ *   guardan en el campo 'localidad' del evento en Firestore.
+ */
+export const LOCALIDADES_POR_ZONA = {
+  sanrafael: ["San Rafael", "General Alvear", "Malargüé"],
+  mendoza: [
+    "Ciudad de Mendoza",
+    "Las Heras",
+    "Godoy Cruz",
+    "Guaymallén",
+    "Maipú",
+    "Luján de Cuyo",
+  ],
+};
+
+/**
  * 1. Función para subir evento:
  * - Valida que la imagen no supere los 2 MB y la sube a Firebase Storage.
+ * - Valida que la localidad seleccionada pertenezca a la lista cerrada de la
+ *   zona (ubicacion) ANTES de subir la imagen a Storage.
  * - Guarda los datos en la colección 'eventos' en Firestore con:
- *   nombre, descripcion, fecha, hora, lugar, direccion, contacto, imagenUrl,
- *   ubicacion ('sanrafael' o 'mendoza'), estado ('pendiente'), destacado (false) y fechaCreacion.
+ *   nombre, descripcion, fecha, hora, lugar, direccion, localidad, contacto,
+ *   imagenUrl, ubicacion ('sanrafael' o 'mendoza'), estado ('pendiente'),
+ *   destacado (false) y fechaCreacion.
  */
 export async function subirEvento({
   nombre,
@@ -28,12 +49,27 @@ export async function subirEvento({
   hora,
   lugar,
   direccion,
+  localidad,
   contacto,
   ubicacion,
   imagenArchivo
 }) {
   if (!imagenArchivo) {
     throw new Error("Debe seleccionar una imagen para el evento.");
+  }
+
+  // Validación de la localidad contra la lista cerrada de la zona.
+  // Se hace ANTES de subir la imagen a Storage para no dejar archivos huérfanos.
+  const localidadesValidas = LOCALIDADES_POR_ZONA[ubicacion];
+  if (!localidadesValidas) {
+    throw new Error(
+      `La zona "${ubicacion}" no es válida. Debe ser 'sanrafael' o 'mendoza'.`
+    );
+  }
+  if (!localidad || !localidadesValidas.includes(localidad)) {
+    throw new Error(
+      `Debe seleccionar una localidad válida para la zona "${ubicacion}". Localidades permitidas: ${localidadesValidas.join(", ")}.`
+    );
   }
 
   const MAX_SIZE_MB = 2;
@@ -59,6 +95,7 @@ export async function subirEvento({
     hora,
     lugar,
     direccion,
+    localidad,
     contacto,
     imagenUrl,
     ubicacion, // 'sanrafael' o 'mendoza'
@@ -155,6 +192,15 @@ export function renderizarTarjetas(eventos, contenedor) {
                 <i class="fa-solid fa-location-dot"></i>
                 <strong>Lugar:</strong> ${ev.lugar || ""} (${ev.direccion || ""})
               </div>
+              ${
+                ev.localidad
+                  ? `
+              <div>
+                <i class="fa-solid fa-city"></i>
+                <strong>Localidad:</strong> ${ev.localidad}
+              </div>`
+                  : ""
+              }
               <div>
                 <i class="fa-solid fa-phone"></i>
                 <strong>Contacto:</strong> ${ev.contacto || ""}
@@ -187,6 +233,7 @@ function obtenerEventosDeMuestra(ubicacion, fechaHoy) {
       hora: "21:00",
       lugar: "Club Español",
       direccion: "Av. Mitre 550",
+      localidad: "San Rafael",
       contacto: "+54 9 260 4111111",
       imagenUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=600&q=80",
       estado: "aprobado",
@@ -201,6 +248,7 @@ function obtenerEventosDeMuestra(ubicacion, fechaHoy) {
       hora: "19:00",
       lugar: "Nave Cultural",
       direccion: "España y Maza",
+      localidad: "Ciudad de Mendoza",
       contacto: "+54 9 261 4333333",
       imagenUrl: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=600&q=80",
       estado: "aprobado",
@@ -218,8 +266,37 @@ function obtenerEventosDeMuestra(ubicacion, fechaHoy) {
 
 
 /**
+ * Carga en el <select id="event-locality"> las localidades permitidas para la
+ * zona indicada, usando LOCALIDADES_POR_ZONA como única fuente de verdad.
+ * La primera opción (deshabilitada y seleccionada) se deja como está en el HTML.
+ */
+export function poblarSelectLocalidades(zona, select) {
+  if (!select) return;
+
+  const localidades = LOCALIDADES_POR_ZONA[zona] || [];
+
+  // Limpiamos cualquier carga previa para no duplicar opciones.
+  select.innerHTML = "";
+
+  const opcionInicial = document.createElement("option");
+  opcionInicial.value = "";
+  opcionInicial.textContent = "Seleccioná la localidad";
+  opcionInicial.disabled = true;
+  opcionInicial.selected = true;
+  select.appendChild(opcionInicial);
+
+  localidades.forEach((localidad) => {
+    const opcion = document.createElement("option");
+    opcion.value = localidad;
+    opcion.textContent = localidad;
+    select.appendChild(opcion);
+  });
+}
+
+/**
  * 3. Inicialización en el ciclo de vida del DOM:
  * - Carga y renderiza eventos para la página actual (sanrafael / mendoza)
+ * - Carga el listado de localidades según la zona de la página
  * - Gestiona el modal de carga y el envío del formulario con subirEvento()
  */
 document.addEventListener("DOMContentLoaded", async () => {
@@ -227,6 +304,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (!ubicacionActual) return;
 
   const eventsGrid = document.getElementById("events-grid");
+
+  // Cargar las localidades de la zona en el formulario de carga de eventos.
+  poblarSelectLocalidades(
+    ubicacionActual,
+    document.getElementById("event-locality")
+  );
 
   async function cargarEventos() {
     if (eventsGrid) {
@@ -312,6 +395,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       const hora = document.getElementById("event-time").value;
       const lugar = document.getElementById("event-place").value.trim();
       const direccion = document.getElementById("event-address").value.trim();
+      const selectLocalidad = document.getElementById("event-locality");
+      const localidad = selectLocalidad ? selectLocalidad.value : "";
       const contacto = document.getElementById("event-contact").value.trim();
 
       const btnSubmit = eventForm.querySelector('button[type="submit"]');
@@ -330,6 +415,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           hora,
           lugar,
           direccion,
+          localidad,
           contacto,
           ubicacion: ubicacionActual,
           imagenArchivo

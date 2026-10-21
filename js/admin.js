@@ -399,6 +399,9 @@ function renderizarListadoAdmin(eventos, contenedor, tab) {
                 📅 <strong>Fecha:</strong> ${ev.fecha || "-"} a las ${ev.hora || "--:--"}hs | 
                 🏛️ <strong>Lugar:</strong> ${ev.lugar || "-"} (${ev.direccion || "-"})
               </p>
+              <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 0.25rem;">
+                🏘️ <strong>Localidad:</strong> ${ev.localidad || "-"}
+              </p>
               <p style="font-size: 0.82rem; color: var(--text-muted);">
                 📞 <strong>Contacto:</strong> ${ev.contacto || "No especificado"}
               </p>
@@ -476,6 +479,7 @@ function obtenerEventosLocales() {
       hora: "20:30",
       lugar: "Parque Hipólito Yrigoyen",
       direccion: "Montes de Oca y Ameghino",
+      localidad: "San Rafael",
       contacto: "+54 9 260 4555555",
       estado: "pendiente",
       destacado: false,
@@ -490,6 +494,7 @@ function obtenerEventosLocales() {
       hora: "21:00",
       lugar: "Club Español",
       direccion: "Av. Mitre 550",
+      localidad: "San Rafael",
       contacto: "+54 9 260 4111111",
       estado: "aprobado",
       destacado: true,
@@ -504,6 +509,7 @@ function obtenerEventosLocales() {
       hora: "19:00",
       lugar: "Nave Cultural",
       direccion: "España y Maza",
+      localidad: "Ciudad de Mendoza",
       contacto: "+54 9 261 4333333",
       estado: "aprobado",
       destacado: true,
@@ -518,6 +524,7 @@ function obtenerEventosLocales() {
       hora: "16:00",
       lugar: "Espacio Le Parc",
       direccion: "Mitre y Godoy Cruz",
+      localidad: "Godoy Cruz",
       contacto: "+54 9 261 4000111",
       estado: "aprobado",
       destacado: false,
