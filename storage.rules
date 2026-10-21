@@ -1,0 +1,20 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Reglas para imágenes y archivos dentro de la carpeta 'eventos'
+    match /eventos/{archivoId} {
+      // 1. Permitir lectura pública de imágenes
+      allow read: if true;
+
+      // 2. Permitir subida solo a usuarios autenticados restringiendo el tamaño a un máximo de 2 MB
+      allow create: if request.auth != null
+                    && request.resource.size < 2 * 1024 * 1024
+                    && request.resource.contentType.matches('image/.*');
+
+      // 3. Permitir eliminación a usuarios autenticados (administradores al eliminar eventos)
+      allow delete: if request.auth != null;
+    }
+  }
+}

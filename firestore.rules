@@ -1,0 +1,28 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Función para validar si el usuario autenticado tiene permisos de administrador
+    // (mediante custom claims auth.token.admin == true, rol 'admin', o registro en colección 'admins')
+    function isAdmin() {
+      return request.auth != null && (
+        request.auth.token.admin == true ||
+        request.auth.token.role == 'admin' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // Reglas para la colección 'eventos'
+    match /eventos/{eventoId} {
+      // 1. Lectura pública para cualquier usuario (no requiere autenticación)
+      allow read: if true;
+
+      // 2. Creación permitida solo a usuarios autenticados
+      allow create: if request.auth != null;
+
+      // 3. Edición y borrado permitido únicamente a administradores
+      allow update, delete: if isAdmin();
+    }
+  }
+}

@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agenda Cultural - San Rafael</title>
+    <link rel="stylesheet" href="../css/styles.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+  </head>
+  <body data-location="sanrafael">
+    <header>
+      <div class="navbar">
+        <a href="../index.html" class="logo">
+          <i class="fa-solid fa-calendar-days"></i> AgendaCultural
+        </a>
+        <nav class="nav-links">
+          <a href="index.html" class="active">San Rafael</a>
+          <a href="../mendoza/index.html">Mendoza</a>
+          <a href="../admin/index.html"
+            ><i class="fa-solid fa-lock"></i> Admin</a
+          >
+        </nav>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="page-header">
+        <div class="page-title">
+          <h2>San Rafael</h2>
+          <p>Eventos culturales y artísticos en el sur mendocino</p>
+        </div>
+        <button id="btn-open-upload" class="btn btn-primary">
+          <i class="fa-solid fa-plus-circle"></i> Cargar Evento
+        </button>
+      </section>
+
+      <section>
+        <div id="events-grid" class="events-grid">
+          <!-- Events will be rendered dynamically via app.js -->
+        </div>
+      </section>
+    </main>
+
+    <!-- Upload Event Modal / Flow -->
+    <div id="upload-modal" class="modal-overlay">
+      <div class="modal-container">
+        <div class="modal-header">
+          <h3>Cargar Nuevo Evento</h3>
+          <button class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <!-- Step 1: Google Auth Simulation -->
+          <div id="auth-step" style="text-align: center; padding: 2rem 0">
+            <h4 style="margin-bottom: 1rem">Iniciá sesión para continuar</h4>
+            <p
+              style="
+                color: var(--text-muted);
+                margin-bottom: 1.5rem;
+                font-size: 0.9rem;
+              "
+            >
+              Para garantizar la calidad de los eventos, necesitamos que
+              autentiques tu cuenta.
+            </p>
+            <button
+              id="btn-google-auth"
+              class="btn btn-outline"
+              style="width: 100%; justify-content: center; gap: 0.75rem"
+            >
+              <i class="fa-brands fa-google" style="color: #ea4335"></i>
+              Continuar con Google
+            </button>
+          </div>
+
+          <!-- Step 2: Event Form (Hidden initially) -->
+          <form id="event-form" style="display: none">
+            <div
+              style="
+                background: rgba(34, 197, 94, 0.1);
+                color: var(--accent);
+                padding: 0.5rem 1rem;
+                border-radius: var(--radius);
+                font-size: 0.85rem;
+                margin-bottom: 1rem;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+              "
+            >
+              <span id="user-logged-email">Autenticado como usuario</span>
+              <button
+                type="button"
+                id="btn-logout"
+                style="
+                  background: none;
+                  border: none;
+                  color: var(--danger);
+                  cursor: pointer;
+                  font-weight: 600;
+                "
+              >
+                Cerrar sesión
+              </button>
+            </div>
+
+            <div class="form-group">
+              <label for="event-image"
+                >Flyer / Banner del Evento (Imagen)</label
+              >
+              <input
+                type="file"
+                id="event-image"
+                accept="image/*"
+                class="form-control"
+                required
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="event-title">Nombre del Evento</label>
+              <input
+                type="text"
+                id="event-title"
+                class="form-control"
+                placeholder="Ej: Concierto de Rock en Vivo"
+                required
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="event-desc">Pequeña Descripción</label>
+              <textarea
+                id="event-desc"
+                class="form-control"
+                placeholder="Detalles principales del evento..."
+                required
+              ></textarea>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="event-date">Fecha</label>
+                <input
+                  type="date"
+                  id="event-date"
+                  class="form-control"
+                  required
+                />
+              </div>
+              <div class="form-group">
+                <label for="event-time">Hora</label>
+                <input
+                  type="time"
+                  id="event-time"
+                  class="form-control"
+                  required
+                />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="event-place">Lugar</label>
+              <input
+                type="text"
+                id="event-place"
+                class="form-control"
+                placeholder="Ej: Teatro Roma"
+                required
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="event-address">Dirección</label>
+              <input
+                type="text"
+                id="event-address"
+                class="form-control"
+                placeholder="Ej: Hipólito Yrigoyen 280"
+                required
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="event-contact">Contacto (Teléfono / Redes)</label>
+              <input
+                type="text"
+                id="event-contact"
+                class="form-control"
+                placeholder="Ej: +54 9 260 4000000"
+                required
+              />
+            </div>
+
+            <div class="form-group">
+              <label>Verificación Captcha</label>
+              <div class="captcha-box">
+                <input type="checkbox" id="captcha-check" required />
+                <label
+                  for="captcha-check"
+                  style="margin: 0; font-weight: normal; cursor: pointer"
+                  >No soy un robot (reCAPTCHA simulado)</label
+                >
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              class="btn btn-primary"
+              style="width: 100%; justify-content: center"
+            >
+              Enviar Evento
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <p>&copy; 2026 Agenda Cultural Cuyo. Todos los derechos reservados.</p>
+    </footer>
+
+    <script type="module" src="../js/auth.js"></script>
+    <script type="module" src="../js/eventos.js"></script>
+  </body>
+</html>

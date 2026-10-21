@@ -1,0 +1,578 @@
+// Panel de Control y Administración de Eventos (/admin)
+import { db, storage, auth, firebaseConfig } from "./firebase-config.js";
+import { loginWithGoogle, logout, handleRedirectResult } from "./auth.js";
+import {
+  onAuthStateChanged,
+  getRedirectResult
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import {
+  collection,
+  getDocs,
+  doc,
+  updateDoc,
+  deleteDoc,
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import {
+  ref,
+  deleteObject,
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+
+let pestañaActiva = "pendientes";
+let todosLosEventos = [];
+
+/**
+ * 1. Aprobar evento: cambia el estado del evento a 'aprobado'
+ */
+export async function aprobarEvento(id) {
+  try {
+    if (firebaseConfig.apiKey) {
+      await updateDoc(doc(db, "eventos", id), { estado: "aprobado" });
+    } else {
+      actualizarEventoLocal(id, { estado: "aprobado" });
+    }
+    await cargarYRenderizarEventos();
+  } catch (error) {
+    console.error("Error al aprobar evento:", error);
+    alert(`Error al aprobar el evento: ${error.message}`);
+  }
+}
+
+/**
+ * 2. Rechazar evento: cambia el estado a 'rechazado'
+ */
+export async function rechazarEvento(id) {
+  try {
+    if (firebaseConfig.apiKey) {
+      await updateDoc(doc(db, "eventos", id), { estado: "rechazado" });
+    } else {
+      actualizarEventoLocal(id, { estado: "rechazado" });
+    }
+    await cargarYRenderizarEventos();
+  } catch (error) {
+    console.error("Error al rechazar evento:", error);
+    alert(`Error al rechazar el evento: ${error.message}`);
+  }
+}
+
+/**
+ * 3. Destacar evento: alterna la propiedad destacado entre true y false
+ */
+export async function alternarDestacado(id, valorActual) {
+  const nuevoValor = !valorActual;
+  try {
+    if (firebaseConfig.apiKey) {
+      await updateDoc(doc(db, "eventos", id), { destacado: nuevoValor });
+    } else {
+      actualizarEventoLocal(id, { destacado: nuevoValor });
+    }
+    await cargarYRenderizarEventos();
+  } catch (error) {
+    console.error("Error al alternar destacado:", error);
+    alert(`Error al cambiar destacado: ${error.message}`);
+  }
+}
+
+/**
+ * 4. Eliminar permanentemente: borra el documento de Firestore y su imagen en Storage
+ */
+export async function eliminarEvento(id, imagenUrl) {
+  const confirmar = confirm(
+    "¿Estás seguro de eliminar permanentemente este evento y su imagen asociada? Esta acción no se puede deshacer.",
+  );
+  if (!confirmar) return;
+
+  try {
+    if (firebaseConfig.apiKey) {
+      if (
+        imagenUrl &&
+        (imagenUrl.includes("firebasestorage.googleapis.com") ||
+          imagenUrl.startsWith("gs://"))
+      ) {
+        try {
+          await deleteObject(ref(storage, imagenUrl));
+        } catch (storageErr) {
+          console.warn("No se pudo eliminar la imagen de Storage:", storageErr);
+        }
+      }
+      await deleteDoc(doc(db, "eventos", id));
+    } else {
+      eliminarEventoLocal(id);
+    }
+
+    alert("Evento eliminado permanentemente.");
+    await cargarYRenderizarEventos();
+  } catch (error) {
+    console.error("Error al eliminar evento:", error);
+    alert(`Error al eliminar el evento: ${error.message}`);
+  }
+}
+
+window.aprobarEvento = aprobarEvento;
+window.rechazarEvento = rechazarEvento;
+window.alternarDestacado = alternarDestacado;
+window.eliminarEvento = eliminarEvento;
+
+/**
+ * Carga eventos desde Firestore (o fallback local) y actualiza contadores y render
+ */
+export async function cargarYRenderizarEventos() {
+  const adminList = document.getElementById("admin-events-list");
+  if (!adminList) return;
+
+  try {
+    if (firebaseConfig.apiKey) {
+      const snapshot = await getDocs(collection(db, "eventos"));
+      todosLosEventos = [];
+      snapshot.forEach((docSnap) => {
+        todosLosEventos.push({ id: docSnap.id, ...docSnap.data() });
+      });
+    } else {
+      todosLosEventos = obtenerEventosLocales();
+    }
+  } catch (err) {
+    console.error("Error al obtener eventos de Firestore:", err);
+    todosLosEventos = obtenerEventosLocales();
+  }
+
+  const hoy = new Date().toISOString().split("T")[0];
+
+  // Clasificación en las 3 pestañas solicitadas
+  const pendientes = todosLosEventos.filter((ev) => ev.estado === "pendiente");
+  const activos = todosLosEventos.filter(
+    (ev) => ev.estado === "aprobado" && (!ev.fecha || ev.fecha >= hoy),
+  );
+  const historial = todosLosEventos.filter(
+    (ev) => (ev.fecha && ev.fecha < hoy) || ev.estado === "rechazado",
+  );
+
+  const countPendientes = document.getElementById("count-pendientes");
+  const countActivos = document.getElementById("count-activos");
+  const countHistorial = document.getElementById("count-historial");
+
+  if (countPendientes) countPendientes.textContent = pendientes.length;
+  if (countActivos) countActivos.textContent = activos.length;
+  if (countHistorial) countHistorial.textContent = historial.length;
+
+  let listaFiltrada = pendientes;
+  if (pestañaActiva === "activos") listaFiltrada = activos;
+  if (pestañaActiva === "historial") listaFiltrada = historial;
+
+  renderizarListadoAdmin(listaFiltrada, adminList, pestañaActiva);
+}
+
+function renderizarListadoAdmin(eventos, contenedor, tab) {
+  if (eventos.length === 0) {
+    contenedor.innerHTML = `
+      <div class="no-events" style="text-align: center; padding: 2.5rem; background: var(--surface); border: 1px dashed var(--border-color); border-radius: var(--radius);">
+        <i class="fa-solid fa-folder-open" style="font-size: 2.5rem; margin-bottom: 0.75rem; color: var(--text-muted);"></i>
+        <h3 style="margin-bottom: 0.25rem;">No hay eventos en esta sección</h3>
+        <p style="color: var(--text-muted); font-size: 0.9rem;">Los eventos clasificados en "${tab}" aparecerán aquí.</p>
+      </div>
+    `;
+    return;
+  }
+
+  eventos.sort((a, b) => {
+    const destA = Boolean(a.destacado);
+    const destB = Boolean(b.destacado);
+    if (destA !== destB) return destA ? -1 : 1;
+    return (a.fecha || "").localeCompare(b.fecha || "");
+  });
+
+  contenedor.innerHTML = eventos
+    .map((ev) => {
+      let badgeClass = "badge-pending";
+      let statusText = "Pendiente";
+      if (ev.estado === "aprobado") {
+        badgeClass = "badge-approved";
+        statusText = "Aprobado";
+      } else if (ev.estado === "rechazado") {
+        badgeClass = "badge-rejected";
+        statusText = "Rechazado";
+      }
+
+      const imagen =
+        ev.imagenUrl ||
+        "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=600&q=80";
+      const esDestacado = Boolean(ev.destacado);
+      const escapeImgUrl = (ev.imagenUrl || "").replace(/'/g, "\\'");
+
+      return `
+        <div class="admin-item" style="border-left: 4px solid ${
+          esDestacado ? "var(--warning)" : "var(--primary)"
+        };">
+          <div class="admin-item-info">
+            <img src="${imagen}" alt="${ev.nombre || "Evento"}" class="admin-item-img">
+            <div>
+              <div style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.35rem; flex-wrap: wrap;">
+                <span class="badge ${badgeClass}">${statusText}</span>
+                ${
+                  esDestacado
+                    ? '<span class="badge" style="background: rgba(245, 158, 11, 0.15); color: var(--warning);"><i class="fa-solid fa-star"></i> Destacado</span>'
+                    : ""
+                }
+                <span style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">
+                  📍 ${ev.ubicacion || "general"}
+                </span>
+              </div>
+              <h4 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 0.25rem;">
+                ${ev.nombre || ev.title || "Sin título"}
+              </h4>
+              <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.25rem;">
+                📅 <strong>Fecha:</strong> ${ev.fecha || "-"} a las ${ev.hora || "--:--"}hs | 
+                🏛️ <strong>Lugar:</strong> ${ev.lugar || "-"} (${ev.direccion || "-"})
+              </p>
+              <p style="font-size: 0.82rem; color: var(--text-muted);">
+                📞 <strong>Contacto:</strong> ${ev.contacto || "No especificado"}
+              </p>
+            </div>
+          </div>
+
+          <div class="admin-actions">
+            <!-- Botón Destacar (alterna true/false) -->
+            <button
+              class="btn btn-sm ${esDestacado ? "btn-primary" : "btn-outline"}"
+              style="${esDestacado ? "background-color: var(--warning); border-color: var(--warning);" : ""}"
+              onclick="alternarDestacado('${ev.id}', ${esDestacado})"
+              title="Alternar evento destacado"
+            >
+              <i class="fa-${esDestacado ? "solid" : "regular"} fa-star"></i>
+              ${esDestacado ? "Destacado" : "Destacar"}
+            </button>
+
+            <!-- Botón Aprobar -->
+            ${
+              ev.estado !== "aprobado"
+                ? `
+              <button
+                class="btn btn-primary btn-sm"
+                onclick="aprobarEvento('${ev.id}')"
+              >
+                <i class="fa-solid fa-check"></i> Aprobar
+              </button>
+            `
+                : ""
+            }
+
+            <!-- Botón Rechazar -->
+            ${
+              ev.estado !== "rechazado"
+                ? `
+              <button
+                class="btn btn-outline btn-sm"
+                style="color: var(--warning); border-color: var(--warning);"
+                onclick="rechazarEvento('${ev.id}')"
+              >
+                <i class="fa-solid fa-ban"></i> Rechazar
+              </button>
+            `
+                : ""
+            }
+
+            <!-- Botón Eliminar permanentemente -->
+            <button
+              class="btn btn-danger btn-sm"
+              onclick="eliminarEvento('${ev.id}', '${escapeImgUrl}')"
+            >
+              <i class="fa-solid fa-trash"></i> Eliminar
+            </button>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+}
+// Métodos de respaldo para entorno local de prueba sin API keys
+function obtenerEventosLocales() {
+  const datos = localStorage.getItem("agenda_events_admin");
+  if (datos) {
+    try {
+      return JSON.parse(datos);
+    } catch (e) {}
+  }
+  const iniciales = [
+    {
+      id: "ev_adm_1",
+      nombre: "Concierto Acústico bajo las Estrellas",
+      ubicacion: "sanrafael",
+      fecha: "2026-11-08",
+      hora: "20:30",
+      lugar: "Parque Hipólito Yrigoyen",
+      direccion: "Montes de Oca y Ameghino",
+      contacto: "+54 9 260 4555555",
+      estado: "pendiente",
+      destacado: false,
+      imagenUrl:
+        "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=600&q=80",
+    },
+    {
+      id: "ev_adm_2",
+      nombre: "Peña Folklórica Tradicional",
+      ubicacion: "sanrafael",
+      fecha: "2026-11-15",
+      hora: "21:00",
+      lugar: "Club Español",
+      direccion: "Av. Mitre 550",
+      contacto: "+54 9 260 4111111",
+      estado: "aprobado",
+      destacado: true,
+      imagenUrl:
+        "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=600&q=80",
+    },
+    {
+      id: "ev_adm_3",
+      nombre: "Festival de Indie Rock Mendocino",
+      ubicacion: "mendoza",
+      fecha: "2026-11-20",
+      hora: "19:00",
+      lugar: "Nave Cultural",
+      direccion: "España y Maza",
+      contacto: "+54 9 261 4333333",
+      estado: "aprobado",
+      destacado: true,
+      imagenUrl:
+        "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=600&q=80",
+    },
+    {
+      id: "ev_adm_4",
+      nombre: "Encuentro de Ceramistas de Cuyo",
+      ubicacion: "mendoza",
+      fecha: "2026-09-10",
+      hora: "16:00",
+      lugar: "Espacio Le Parc",
+      direccion: "Mitre y Godoy Cruz",
+      contacto: "+54 9 261 4000111",
+      estado: "aprobado",
+      destacado: false,
+      imagenUrl:
+        "https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?auto=format&fit=crop&w=600&q=80",
+    },
+  ];
+  localStorage.setItem("agenda_events_admin", JSON.stringify(iniciales));
+  return iniciales;
+}
+
+function actualizarEventoLocal(id, campos) {
+  const eventos = obtenerEventosLocales();
+  const index = eventos.findIndex((ev) => ev.id === id);
+  if (index !== -1) {
+    eventos[index] = { ...eventos[index], ...campos };
+    localStorage.setItem("agenda_events_admin", JSON.stringify(eventos));
+  }
+}
+
+function eliminarEventoLocal(id) {
+  const eventos = obtenerEventosLocales().filter((ev) => ev.id !== id);
+  localStorage.setItem("agenda_events_admin", JSON.stringify(eventos));
+}
+
+// Lista de correos autorizados con permisos de administrador
+export const ADMIN_EMAILS = [
+  "renzobecerragaitan@gmail.com",
+  "cerezoli387@gmail.com",
+];
+
+/**
+ * Valida si un correo electrónico pertenece a la lista de administradores
+ */
+export function esUsuarioAdmin(email) {
+  if (!email || typeof email !== "string") return false;
+  const normalizado = email.toLowerCase().trim();
+  return ADMIN_EMAILS.some(
+    (admin) => admin.toLowerCase().trim() === normalizado,
+  );
+}
+
+function mostrarAlertaAuth(mensaje) {
+  const alertBox = document.getElementById("admin-auth-alert");
+  const alertMsg = document.getElementById("admin-auth-alert-msg");
+  if (alertBox && alertMsg) {
+    alertMsg.textContent = mensaje;
+    alertBox.style.display = "flex";
+  }
+}
+
+function limpiarAlertaAuth() {
+  const alertBox = document.getElementById("admin-auth-alert");
+  const alertMsg = document.getElementById("admin-auth-alert-msg");
+  if (alertBox) alertBox.style.display = "none";
+  if (alertMsg) alertMsg.textContent = "";
+}
+
+/**
+ * Iniciar sesión con Google para el panel de administración usando signInWithRedirect
+ */
+export async function iniciarSesionAdmin() {
+  limpiarAlertaAuth();
+  const btnLogin = document.getElementById("btn-admin-login");
+  const originalHtml = btnLogin ? btnLogin.innerHTML : "";
+
+  try {
+    if (btnLogin) {
+      btnLogin.disabled = true;
+      btnLogin.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Redirigiendo a Google...`;
+    }
+
+    if (!firebaseConfig.apiKey) {
+      const simular = confirm(
+        "Aviso: Las credenciales de Firebase en js/firebase-config.js están vacías.\n\n" +
+        "¿Deseas iniciar sesión como 'renzobecerragaitan@gmail.com' en modo prueba para ver el panel?"
+      );
+      if (simular) {
+        localStorage.setItem("agenda_admin_demo_user", "renzobecerragaitan@gmail.com");
+        await actualizarVistaAdminParaUsuario({
+          displayName: "Renzo Becerra",
+          email: "renzobecerragaitan@gmail.com"
+        });
+        return;
+      } else {
+        mostrarAlertaAuth("Debes completar las credenciales de Firebase en js/firebase-config.js para usar Google Auth.");
+        if (btnLogin) {
+          btnLogin.disabled = false;
+          btnLogin.innerHTML = originalHtml;
+        }
+        return;
+      }
+    }
+
+    // Ejecutar redirección de Google
+    await loginWithGoogle();
+  } catch (error) {
+    console.error("Error al iniciar redirección con Google:", error);
+    mostrarAlertaAuth(`Error al autenticar: ${error.message}`);
+    if (btnLogin) {
+      btnLogin.disabled = false;
+      btnLogin.innerHTML = originalHtml;
+    }
+  }
+}
+
+/**
+ * Cerrar sesión del panel de administración
+ */
+export async function cerrarSesionAdmin() {
+  try {
+    localStorage.removeItem("agenda_admin_demo_user");
+    await logout();
+  } catch (e) {
+    console.error("Fallo al cerrar sesión:", e);
+  } finally {
+    const authGuard = document.getElementById("admin-auth-guard");
+    const dashboard = document.getElementById("admin-dashboard");
+    if (authGuard) authGuard.style.display = "block";
+    if (dashboard) dashboard.style.display = "none";
+    limpiarAlertaAuth();
+  }
+}
+
+window.iniciarSesionAdmin = iniciarSesionAdmin;
+window.cerrarSesionAdmin = cerrarSesionAdmin;
+
+async function actualizarVistaAdminParaUsuario(user) {
+  const authGuard = document.getElementById("admin-auth-guard");
+  const dashboard = document.getElementById("admin-dashboard");
+  const userEmailSpan = document.getElementById("admin-user-email");
+
+  limpiarAlertaAuth();
+  if (authGuard) authGuard.style.display = "none";
+  if (dashboard) dashboard.style.display = "block";
+  if (userEmailSpan) {
+    userEmailSpan.textContent = user.displayName
+      ? `${user.displayName} (${user.email})`
+      : user.email;
+  }
+  await cargarYRenderizarEventos();
+}
+
+async function initAdmin() {
+  const authGuard = document.getElementById("admin-auth-guard");
+  const dashboard = document.getElementById("admin-dashboard");
+  const btnLogin = document.getElementById("btn-admin-login");
+  const btnLogout = document.getElementById("btn-admin-logout");
+  const tabButtons = document.querySelectorAll(".tab-btn");
+
+  // Capturar resultado de redirección al regresar de Google
+  try {
+    const redirectUser = await getRedirectResult(auth);
+    if (redirectUser && redirectUser.user) {
+      console.log("Retorno de redirección exitoso en admin:", redirectUser.user.email);
+    }
+  } catch (error) {
+    console.error("Error al capturar getRedirectResult en admin:", error);
+    mostrarAlertaAuth(`Error al procesar la autenticación de Google: ${error.message}`);
+  }
+
+  // Enlazar botón login con Google
+  if (btnLogin) {
+    btnLogin.addEventListener("click", () => {
+      iniciarSesionAdmin();
+    });
+  }
+
+  // Enlazar botón logout
+  if (btnLogout) {
+    btnLogout.addEventListener("click", () => {
+      cerrarSesionAdmin();
+    });
+  }
+
+  // Listener de autenticación con control de acceso por correo
+  onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      const email = user.email || "";
+      if (esUsuarioAdmin(email)) {
+        // Acceso permitido para administrador
+        await actualizarVistaAdminParaUsuario(user);
+      } else {
+        // Acceso denegado: el correo no pertenece a la lista de administradores
+        if (dashboard) dashboard.style.display = "none";
+        if (authGuard) authGuard.style.display = "block";
+
+        const mensaje = `Acceso denegado: El correo "${email}" no tiene permisos de administrador.`;
+        mostrarAlertaAuth(mensaje);
+        alert(mensaje + "\nLa sesión será cerrada por seguridad.");
+
+        try {
+          await logout();
+        } catch (e) {
+          console.warn("Error al cerrar sesión no autorizada:", e);
+        }
+      }
+    } else {
+      // Sin sesión activa
+      const demoEmail = localStorage.getItem("agenda_admin_demo_user");
+      if (!firebaseConfig.apiKey && demoEmail && esUsuarioAdmin(demoEmail)) {
+        await actualizarVistaAdminParaUsuario({
+          displayName: "Renzo Becerra (Demo)",
+          email: demoEmail
+        });
+      } else {
+        if (authGuard) authGuard.style.display = "block";
+        if (dashboard) dashboard.style.display = "none";
+      }
+    }
+  });
+
+  // Cambio de pestañas (Pendientes / Activos / Historial)
+  tabButtons.forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      const targetBtn = e.currentTarget;
+      pestañaActiva = targetBtn.getAttribute("data-tab");
+
+      tabButtons.forEach((b) => {
+        b.classList.remove("btn-primary");
+        b.classList.add("btn-outline");
+      });
+      targetBtn.classList.remove("btn-outline");
+      targetBtn.classList.add("btn-primary");
+
+      cargarYRenderizarEventos();
+    });
+  });
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initAdmin);
+} else {
+  initAdmin();
+}

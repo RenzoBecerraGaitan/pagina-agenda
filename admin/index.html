@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agenda Cultural - Panel de Administración</title>
+    <link rel="stylesheet" href="../css/styles.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+  </head>
+  <body>
+    <header>
+      <div class="navbar">
+        <a href="../index.html" class="logo">
+          <i class="fa-solid fa-calendar-days"></i> AgendaCultural
+        </a>
+        <nav class="nav-links">
+          <a href="../sanrafael/index.html">San Rafael</a>
+          <a href="../mendoza/index.html">Mendoza</a>
+          <a href="index.html" class="active"><i class="fa-solid fa-lock"></i> Admin</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container">
+      <!-- 1. Pantalla de Autenticación Requerida -->
+      <section
+        id="admin-auth-guard"
+        style="
+          max-width: 480px;
+          margin: 3.5rem auto;
+          text-align: center;
+          background: var(--surface);
+          padding: 2.5rem 2rem;
+          border-radius: var(--radius);
+          border: 1px solid var(--border-color);
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        "
+      >
+        <i class="fa-solid fa-shield-halved" style="font-size: 3rem; color: var(--primary); margin-bottom: 1rem"></i>
+        <h2 style="margin-bottom: 0.75rem">Panel de Administración</h2>
+        <p style="color: var(--text-muted); margin-bottom: 1.5rem; font-size: 0.95rem">
+          Para moderar y gestionar los eventos culturales, debes iniciar sesión con una cuenta de Google autorizada.
+        </p>
+
+        <!-- Mensaje de alerta / error de acceso -->
+        <div
+          id="admin-auth-alert"
+          style="
+            display: none;
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            padding: 0.75rem 1rem;
+            border-radius: var(--radius);
+            margin-bottom: 1.5rem;
+            font-size: 0.88rem;
+            text-align: left;
+            align-items: center;
+            gap: 0.6rem;
+          "
+        >
+          <i class="fa-solid fa-circle-exclamation" style="font-size: 1.1rem; flex-shrink: 0;"></i>
+          <span id="admin-auth-alert-msg"></span>
+        </div>
+
+        <button
+          type="button"
+          id="btn-admin-login"
+          class="btn btn-outline"
+          onclick="window.iniciarSesionAdmin?.()"
+          style="width: 100%; justify-content: center; gap: 0.75rem; padding: 0.8rem 1rem; font-size: 0.95rem; font-weight: 600;"
+        >
+          <i class="fa-brands fa-google" style="color: #ea4335"></i>
+          Iniciar sesión con Google
+        </button>
+      </section>
+
+      <!-- 2. Dashboard de Administración (autenticado) -->
+      <div id="admin-dashboard" style="display: none">
+        <section
+          class="page-header"
+          style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;"
+        >
+          <div class="page-title">
+            <h2>Panel de Administración</h2>
+            <p>Moderación y gestión de eventos culturales</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+            <div
+              id="admin-user-info"
+              style="font-size: 0.85rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.5rem; background: var(--surface); padding: 0.45rem 0.85rem; border-radius: var(--radius); border: 1px solid var(--border-color);"
+            >
+              <i class="fa-solid fa-circle-check" style="color: var(--accent)"></i>
+              <span id="admin-user-email">Cargando usuario...</span>
+            </div>
+            <button
+              type="button"
+              id="btn-admin-logout"
+              class="btn btn-outline btn-sm"
+              onclick="window.cerrarSesionAdmin?.()"
+            >
+              <i class="fa-solid fa-arrow-right-from-bracket"></i> Cerrar Sesión
+            </button>
+          </div>
+        </section>
+
+        <!-- Pestañas de Navegación -->
+        <section>
+          <div
+            class="tabs-bar"
+            style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;"
+          >
+            <button class="tab-btn btn btn-primary btn-sm" data-tab="pendientes">
+              <i class="fa-solid fa-clock"></i> Pendientes
+              <span id="count-pendientes" class="badge badge-pending" style="margin-left: 0.35rem">0</span>
+            </button>
+            <button class="tab-btn btn btn-outline btn-sm" data-tab="activos">
+              <i class="fa-solid fa-circle-check"></i> Aprobados / Activos
+              <span id="count-activos" class="badge badge-approved" style="margin-left: 0.35rem">0</span>
+            </button>
+            <button class="tab-btn btn btn-outline btn-sm" data-tab="historial">
+              <i class="fa-solid fa-box-archive"></i> Historial / Pasados
+              <span id="count-historial" class="badge" style="background: rgba(148, 163, 184, 0.2); color: var(--text-muted); margin-left: 0.35rem">0</span>
+            </button>
+          </div>
+
+          <div id="admin-events-list" class="admin-list">
+            <!-- Renderizado dinámico desde Firestore -->
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <footer>
+      <p>&copy; 2026 Agenda Cultural Cuyo. Todos los derechos reservados.</p>
+    </footer>
+
+    <script type="module" src="../js/auth.js"></script>
+    <script type="module" src="../js/admin.js"></script>
+  </body>
+</html>
+
