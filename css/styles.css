@@ -24,6 +24,13 @@
   padding: 0;
 }
 
+html,
+body {
+  overflow-x: clip;
+  overflow-x: hidden; /* fallback para navegadores antiguos: evita scroll horizontal */
+  /* No se restringe el zoom del usuario */
+}
+
 body {
   font-family:
     "Inter",
@@ -62,11 +69,13 @@ header {
 
 .navbar {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   padding: 1rem;
   max-width: 1200px;
   margin: 0 auto;
+  gap: 0.75rem;
 }
 
 .logo {
@@ -80,7 +89,8 @@ header {
 
 .nav-links {
   display: flex;
-  gap: 1rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
   align-items: center;
 }
 
@@ -196,7 +206,7 @@ header {
 /* Location Cards on Home */
 .locations-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1.5rem;
   margin-bottom: 2rem;
 }
@@ -219,8 +229,10 @@ header {
 
 .location-card img {
   width: 100%;
+  max-width: 100%;
   height: 250px;
   object-fit: cover;
+  display: block;
 }
 
 .location-card-content {
@@ -234,12 +246,14 @@ header {
 .location-card h3 {
   font-size: 1.25rem;
   margin-bottom: 0.5rem;
+  overflow-wrap: anywhere;
 }
 
 .location-card p {
   color: var(--text-muted);
   font-size: 0.9rem;
   margin-bottom: 1.5rem;
+  overflow-wrap: anywhere;
 }
 
 /* Page Header & Actions */
@@ -263,7 +277,7 @@ header {
 /* Events Grids */
 .events-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1.5rem;
 }
 
@@ -299,8 +313,10 @@ header {
 
 .event-img {
   width: 100%;
+  max-width: 100%;
   height: 200px;
   object-fit: cover;
+  display: block;
 }
 
 .event-body {
@@ -326,6 +342,7 @@ header {
   font-size: 1.15rem;
   font-weight: 700;
   margin-bottom: 0.5rem;
+  overflow-wrap: anywhere;
 }
 
 .event-desc {
@@ -333,6 +350,68 @@ header {
   color: var(--text-muted);
   margin-bottom: 1rem;
   flex: 1;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.event-desc.collapsed {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.event-more {
+  margin-top: 0.5rem;
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: var(--primary);
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: underline;
+}
+.event-more:hover {
+  color: var(--primary-dark);
+}
+.desc-counter {
+  font-size: 0.75rem;
+  text-align: right;
+  margin-top: 0.15rem;
+  height: 1rem;
+}
+.desc-counter.warn {
+  color: var(--warning);
+}
+.desc-counter.danger {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+/* WhatsApp links en landing */
+.whatsapp-links {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  justify-content: center;
+}
+.whatsapp-links .btn-whatsapp {
+  flex: 1 1 260px;
+  min-width: 240px;
+  justify-content: center;
+  text-align: center;
+  padding: 0.9rem 1rem;
+}
+.whatsapp-links .wa-titulo {
+  display: block;
+  font-weight: 700;
+  font-size: 1rem;
+}
+.whatsapp-links .wa-desc {
+  display: block;
+  font-size: 0.8rem;
+  opacity: 0.9;
+  margin-top: 0.15rem;
 }
 
 .event-details {
@@ -461,7 +540,7 @@ textarea.form-control {
 
 .form-row {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
 }
 
@@ -501,11 +580,13 @@ textarea.form-control {
   display: flex;
   gap: 1rem;
   align-items: center;
+  min-width: 0;
 }
 
 .admin-item-img {
   width: 60px;
   height: 60px;
+  max-width: 100%;
   border-radius: 8px;
   object-fit: cover;
   flex-shrink: 0;
@@ -555,15 +636,15 @@ footer {
 /* Media Queries for Tablet & Desktop */
 @media (min-width: 768px) {
   .locations-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .events-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .form-row {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .page-header {
@@ -585,6 +666,6 @@ footer {
 
 @media (min-width: 1024px) {
   .events-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }

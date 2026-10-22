@@ -33,6 +33,24 @@ export const LOCALIDADES_POR_ZONA = {
   ],
 };
 
+export const MAX_DESCRIPCION = 300;
+export const DESCRIPCION_CORTA = 140;
+
+/**
+ * Escapa HTML para prevenir XSS al insertar texto de usuario con innerHTML.
+ * @param {string|null|undefined} texto
+ * @returns {string}
+ */
+function escapeHtml(texto) {
+  if (texto === null || texto === undefined) return "";
+  return String(texto)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 /**
  * 1. Función para subir evento:
  * - Exige que haya un usuario de Google autenticado (auth.currentUser).
@@ -84,6 +102,13 @@ export async function subirEvento({
     );
   }
 
+  const descripcionLimpia = (descripcion || "").trim();
+  if (descripcionLimpia.length > MAX_DESCRIPCION) {
+    throw new Error(
+      `La descripción no puede exceder los ${MAX_DESCRIPCION} caracteres (actual: ${descripcionLimpia.length}).`,
+    );
+  }
+
   const MAX_SIZE_MB = 2;
   const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
   if (imagenArchivo.size > MAX_SIZE_BYTES) {
@@ -103,7 +128,7 @@ export async function subirEvento({
   const eventoRef = doc(collection(db, "eventos"));
   const nuevoEvento = {
     nombre,
-    descripcion,
+    descripcion: descripcionLimpia,
     fecha,
     hora,
     lugar,
@@ -194,45 +219,57 @@ export function renderizarTarjetas(eventos, contenedor) {
     .map((ev) => {
       const esDestacado = Boolean(ev.destacado);
       const fechaFormateada = formatearFecha(ev.fecha);
-      const imagen =
-        ev.imagenUrl ||
+      const nombre = ev.nombre || "Sin título";
+      const descripcion = ev.descripcion || "";
+      const IMAGEN_POR_DEFECTO =
         "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=600&q=80";
+      const imagen =
+        ev.imagenUrl && ev.imagenUrl.startsWith("https://")
+          ? ev.imagenUrl
+          : IMAGEN_POR_DEFECTO;
+      const esLarga = descripcion.length > DESCRIPCION_CORTA;
 
       return `
-        <div class="event-card ${esDestacado ? "featured" : ""}">
+        <article class="event-card ${esDestacado ? "featured" : ""}">
           ${
             esDestacado
               ? '<span class="featured-badge"><i class="fa-solid fa-star"></i> Destacado</span>'
               : ""
           }
-          <img src="${imagen}" alt="${ev.nombre || "Evento"}" class="event-img" loading="lazy">
+          <img src="${imagen}" alt="${escapeHtml(nombre)}" class="event-img" loading="lazy">
           <div class="event-body">
             <span class="event-date-badge">
-              <i class="fa-regular fa-calendar"></i> ${fechaFormateada} - ${ev.hora || ""}hs
+              <i class="fa-regular fa-calendar"></i>
+              <time datetime="${ev.fecha || ""}">${escapeHtml(fechaFormateada)}</time> - ${escapeHtml(ev.hora || "")}hs
             </span>
-            <h3 class="event-title">${ev.nombre || ""}</h3>
-            <p class="event-desc">${ev.descripcion || ""}</p>
+            <h3 class="event-title">${escapeHtml(nombre)}</h3>
+            <p class="event-desc${esLarga ? " collapsed" : ""}">${escapeHtml(descripcion)}</p>
+            ${
+              esLarga
+                ? '<button type="button" class="event-more" aria-expanded="false">Ver más</button>'
+                : ""
+            }
             <div class="event-details">
               <div>
                 <i class="fa-solid fa-location-dot"></i>
-                <strong>Lugar:</strong> ${ev.lugar || ""} (${ev.direccion || ""})
+                <strong>Lugar:</strong> ${escapeHtml(ev.lugar || "")} (${escapeHtml(ev.direccion || "")})
               </div>
               ${
                 ev.localidad
                   ? `
               <div>
                 <i class="fa-solid fa-city"></i>
-                <strong>Localidad:</strong> ${ev.localidad}
+                <strong>Localidad:</strong> ${escapeHtml(ev.localidad)}
               </div>`
                   : ""
               }
               <div>
                 <i class="fa-solid fa-phone"></i>
-                <strong>Contacto:</strong> ${ev.contacto || ""}
+                <strong>Contacto:</strong> ${escapeHtml(ev.contacto || "")}
               </div>
             </div>
           </div>
-        </div>
+        </article>
       `;
     })
     .join("");
@@ -388,9 +425,60 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  if (modalOverlay) {
-    modalOverlay.addEventListener("click", (e) => {
-      if (e.target === modalOverlay) modalOverlay.classList.remove("active");
+
+
+  // Selector nativo de fecha y hora al hacer clic en el campo (incluido ícono)
+  const dateInput = document.getElementById("event-date");
+  const timeInput = document.getElementById("event-time");
+  [dateInput, timeInput].forEach((input) => {
+    if (input) {
+      input.style.cursor = "pointer";
+      input.addEventListener("click", () => {
+        try {
+          input.showPicker();
+        } catch (_) {
+          // Navegador no soporta showPicker: el navegador ya abre el selector nativo
+        }
+      });
+    }
+  });
+
+  // Contador en vivo de la descripción
+  const descTextarea = document.getElementById("event-desc");
+  if (descTextarea) {
+    descTextarea.setAttribute("maxlength", String(MAX_DESCRIPCION));
+    const counter = document.createElement("span");
+    counter.id = "desc-counter";
+    counter.className = "desc-counter";
+    counter.setAttribute("aria-live", "polite");
+    descTextarea.parentNode.insertBefore(counter, descTextarea.nextSibling);
+    function actualizarContadorDesc() {
+      const len = descTextarea.value.length;
+      counter.textContent = `${len}/${MAX_DESCRIPCION}`;
+      counter.classList.remove("warn", "danger");
+      if (len >= MAX_DESCRIPCION) {
+        counter.classList.add("danger");
+      } else if (len >= Math.round(MAX_DESCRIPCION * 0.9)) {
+        counter.classList.add("warn");
+      }
+    }
+    descTextarea.addEventListener("input", actualizarContadorDesc);
+    actualizarContadorDesc();
+  }
+
+  // Listener delegado para "Ver más" / "Ver menos" de descripciones largas
+  const eventsGrid = document.getElementById("events-grid");
+  if (eventsGrid) {
+    eventsGrid.addEventListener("click", (e) => {
+      const btn = e.target.closest(".event-more");
+      if (!btn) return;
+      const card = btn.closest(".event-card");
+      const desc = card ? card.querySelector(".event-desc") : null;
+      if (!desc) return;
+      const expanded = btn.getAttribute("aria-expanded") === "true";
+      desc.classList.toggle("collapsed");
+      btn.setAttribute("aria-expanded", String(!expanded));
+      btn.textContent = !expanded ? "Ver menos" : "Ver más";
     });
   }
 
@@ -458,6 +546,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           "¡Evento enviado con éxito! Quedará pendiente de aprobación por el moderador.",
         );
         eventForm.reset();
+        actualizarContadorDesc();
 
         if (modalOverlay) {
           modalOverlay.classList.remove("active");

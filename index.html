@@ -31,9 +31,37 @@
           Enterate de todos los eventos, recitales, obras de teatro cerca tuyo
           en un solo lugar. ¡Sumate a nuestra comunidad!
         </p>
-        <a href="https://whatsapp.com" target="_blank" class="btn btn-whatsapp">
-          <i class="fa-brands fa-whatsapp"></i> Unirse a los grupos de WhatsApp
-        </a>
+        <div class="whatsapp-links">
+          <a
+            id="wa-sanrafael"
+            href="#"
+            class="btn btn-whatsapp"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-disabled="true"
+          >
+            <i class="fa-brands fa-whatsapp"></i>
+            <span class="wa-titulo">Grupo San Rafael</span>
+            <span class="wa-desc"
+              >Eventos de San Rafael, General Alvear y Malargüé</span
+            >
+          </a>
+          <a
+            id="wa-mendoza"
+            href="#"
+            class="btn btn-whatsapp"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-disabled="true"
+          >
+            <i class="fa-brands fa-whatsapp"></i>
+            <span class="wa-titulo">Grupo Gran Mendoza</span>
+            <span class="wa-desc"
+              >Eventos de Ciudad de Mendoza, Las Heras, Godoy Cruz, Guaymallén,
+              Maipú y Luján de Cuyo</span
+            >
+          </a>
+        </div>
       </section>
 
       <section class="page-header">
@@ -45,7 +73,10 @@
 
       <div class="locations-grid">
         <div class="location-card">
-          <img src="/assets/logoagendajpg.jpg" alt="San Rafael" />
+          <img
+            src="assets/logoagendasanrafael.webp"
+            alt="Logo Agenda Cultural"
+          />
           <div class="location-card-content">
             <div>
               <h3>San Rafael</h3>
@@ -61,7 +92,7 @@
         </div>
 
         <div class="location-card">
-          <img src="assets/agendagranmendoza.PNG" />
+          <img src="assets/logoagendamendoza.webp" alt="Gran Mendoza" />
           <div class="location-card-content">
             <div>
               <h3>Gran Mendoza</h3>
@@ -76,11 +107,19 @@
           </div>
         </div>
         <div class="location-card">
-          <img src="assets/agendazonaeste.PNG" />
+          <img src="assets/logoagendazonaeste.webp" alt="Zona Este" />
           <div class="location-card-content">
             <div>
               <h3>Zona Este</h3>
-              <h1>Proximamente</h1>
+              <span
+                class="badge"
+                style="
+                  background: var(--warning);
+                  color: #fff;
+                  font-size: large;
+                "
+                >Próximamente</span
+              >
               <p>Recitales, festivales, arte y en la Zona Este de Mendoza</p>
             </div>
           </div>
@@ -89,9 +128,10 @@
     </main>
 
     <footer>
-      <p>&copy; 2026 Agenda Cultural Cuyo. Todos los derechos reservados.</p>
+      <p>&copy; 2026 Agenda Cultural Mendoza. Todos los derechos reservados.</p>
     </footer>
 
     <script src="js/app.js"></script>
+    <script type="module" src="js/whatsapp.js"></script>
   </body>
 </html>

@@ -11,6 +11,7 @@ import {
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   setDoc,
   updateDoc,
@@ -34,6 +35,21 @@ let mapaAutores = {};
 // Mapa de autores bloqueados por UID: { [uid]: { email, motivo, bloqueadoPor, fecha } }
 export let mapaBloqueados = {};
 
+/**
+ * Escapa HTML para prevenir XSS al insertar texto de usuario con innerHTML.
+ * @param {string|null|undefined} texto
+ * @returns {string}
+ */
+function escapeHtml(texto) {
+  if (texto === null || texto === undefined) return "";
+  return String(texto)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 // Función auxiliar para garantizar un token de autenticación fresco
 async function obtenerTokenValido() {
   const user = auth.currentUser;
@@ -45,34 +61,16 @@ async function obtenerTokenValido() {
     throw error;
   }
 
-  // Forzar actualización del token para que las reglas de Firestore reciban request.auth.token.email
+  // Obtener el token de ID actual (sin forzar renovación en cada acción)
   try {
-    await user.getIdToken(true);
+    await user.getIdToken();
   } catch (tokenError) {
     console.error(
-      "[admin] Error al renovar el token:",
+      "[admin] Error al obtener el token de autenticación:",
       tokenError.code,
       tokenError.message,
     );
     throw tokenError;
-  }
-
-  // Diagnóstico temporal: email del perfil, uid y email del claim del token
-  try {
-    const tokenResult = await user.getIdTokenResult();
-    console.log("[admin] Diagnóstico de sesión", {
-      emailPerfil: user.email,
-      uid: user.uid,
-      emailEnToken: tokenResult.claims.email,
-      emailCoincide: tokenResult.claims.email === user.email,
-      esAdminSegunReglas:
-        tokenResult.claims.email === "renzobecerragaitan@gmail.com" ||
-        tokenResult.claims.email === "cerezoli387@gmail.com",
-      mismaInstanciaApp: auth.app.name === db.app.name,
-      appName: auth.app.name,
-    });
-  } catch (diagError) {
-    console.warn("[admin] No se pudo leer getIdTokenResult():", diagError);
   }
 
   return user;
@@ -301,7 +299,9 @@ export function renderizarBloqueados(contenedor) {
     <div class="admin-list-bloqueados">
       ${entradas
         .map(([uid, data]) => {
-          const fecha = data.fecha ? new Date(data.fecha).toLocaleString("es-AR") : "-";
+          const fecha = data.fecha
+            ? data.fecha.toDate().toLocaleString("es-AR")
+            : "-";
           const idLiteral = literalAtributo(uid);
           return `
             <div class="admin-item" style="border-left: 4px solid var(--danger); padding: 1rem; margin-bottom: 0.75rem; background: var(--surface); border-radius: var(--radius);">
@@ -312,13 +312,13 @@ export function renderizarBloqueados(contenedor) {
                   </span>
                 </div>
                 <p style="font-size: 0.9rem; margin-bottom: 0.25rem;">
-                  <strong>Autor:</strong> ${data.nombre || data.email} (${data.email || "-"})
+                  <strong>Autor:</strong> ${escapeHtml(data.nombre || data.email || "")} (${escapeHtml(data.email || "-")})
                 </p>
                 <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.25rem;">
-                  <strong>Motivo:</strong> ${data.motivo || "Sin motivo especificado"}
+                  <strong>Motivo:</strong> ${escapeHtml(data.motivo || "Sin motivo especificado")}
                 </p>
                 <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.25rem;">
-                  <strong>Bloqueado por:</strong> ${data.bloqueadoPor || "-"} | <strong>Fecha:</strong> ${fecha}
+                  <strong>Bloqueado por:</strong> ${escapeHtml(data.bloqueadoPor || "-")} | <strong>Fecha:</strong> ${fecha}
                 </p>
                 <button
                   class="btn btn-outline btn-sm"
@@ -382,13 +382,14 @@ export async function cargarYRenderizarEventos() {
         console.error("[admin] Error al leer la colección 'autores':", autoresErr);
       }
 
-      // Leer autores bloqueados (mapa por UID). Nunca rompe el panel si falla.
+      // Leer autores bloqueados (mapa por UID). El ID del documento ES el UID del autor.
+      // Nunca rompe el panel si falla.
       try {
         mapaBloqueados = {};
         const bloqueadosSnap = await getDocs(collection(db, "bloqueados"));
         bloqueadosSnap.forEach((d) => {
           const data = d.data();
-          if (data && data.uid) mapaBloqueados[data.uid] = data;
+          if (data) mapaBloqueados[d.id] = data;
         });
       } catch (bloqueadosErr) {
         console.error("[admin] Error al leer la colección 'bloqueados':", bloqueadosErr);
@@ -482,7 +483,7 @@ function renderizarListadoAdmin(eventos, contenedor, tab) {
       <div class="no-events" style="text-align: center; padding: 2.5rem; background: var(--surface); border: 1px dashed var(--border-color); border-radius: var(--radius);">
         <i class="fa-solid fa-folder-open" style="font-size: 2.5rem; margin-bottom: 0.75rem; color: var(--text-muted);"></i>
         <h3 style="margin-bottom: 0.25rem;">No hay eventos en esta sección</h3>
-        <p style="color: var(--text-muted); font-size: 0.9rem;">Los eventos clasificados en "${tab}" aparecerán aquí.</p>
+        <p style="color: var(--text-muted); font-size: 0.9rem;">Los eventos clasificados en "${escapeHtml(tab)}" aparecerán aquí.</p>
       </div>
     `;
     return;
@@ -526,7 +527,7 @@ function renderizarListadoAdmin(eventos, contenedor, tab) {
           esDestacado ? "var(--warning)" : "var(--primary)"
         };">
           <div class="admin-item-info">
-            <img src="${imagen}" alt="${ev.nombre || "Evento"}" class="admin-item-img">
+            <img src="${imagen}" alt="${escapeHtml(ev.nombre || "Evento")}" class="admin-item-img">
             <div>
               <div style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.35rem; flex-wrap: wrap;">
                 <span class="badge ${badgeClass}">${statusText}</span>
@@ -536,7 +537,7 @@ function renderizarListadoAdmin(eventos, contenedor, tab) {
                     : ""
                 }
                 <span style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">
-                  📍 ${ev.ubicacion || "general"}
+                  📍 ${escapeHtml(ev.ubicacion || "general")}
                 </span>
               </div>
               <h4 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 0.25rem;">
@@ -547,14 +548,14 @@ function renderizarListadoAdmin(eventos, contenedor, tab) {
                 🏛️ <strong>Lugar:</strong> ${ev.lugar || "-"} (${ev.direccion || "-"})
               </p>
               <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 0.25rem;">
-                🏘️ <strong>Localidad:</strong> ${ev.localidad || "-"}
+                🏘️ <strong>Localidad:</strong> ${escapeHtml(ev.localidad || "-")}
               </p>
               <p style="font-size: 0.82rem; color: var(--text-muted);">
-                📞 <strong>Contacto:</strong> ${ev.contacto || "No especificado"}
+                📞 <strong>Contacto:</strong> ${escapeHtml(ev.contacto || "No especificado")}
               </p>
               ${autor
                 ? `<p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 0.25rem;">
-                      👤 <strong>Autor:</strong> ${autor.nombre || autor.email} (${autor.email})
+                      👤 <strong>Autor:</strong> ${escapeHtml(autor.nombre || autor.email || "")} (${escapeHtml(autor.email || "")})
                       ${autorBloqueado ? ' <span class="badge" style="background: var(--danger); color: #fff;">Autor bloqueado</span>' : ""}
                     </p>`
                 : `<p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 0.25rem;">
@@ -840,6 +841,62 @@ async function actualizarVistaAdminParaUsuario(user) {
       : user.email;
   }
   await cargarYRenderizarEventos();
+  await cargarConfigWhatsAppAdmin();
+}
+
+/**
+ * Lee config/whatsapp de Firestore y precarga los inputs del admin.
+ */
+async function cargarConfigWhatsAppAdmin() {
+  const inputSR = document.getElementById("wa-sanrafael-admin");
+  const inputMdz = document.getElementById("wa-mendoza-admin");
+  if (!inputSR && !inputMdz) return;
+  try {
+    const snap = await getDoc(doc(db, "config", "whatsapp"));
+    if (snap.exists()) {
+      const data = snap.data();
+      if (inputSR && data.sanrafael) inputSR.value = data.sanrafael;
+      if (inputMdz && data.mendoza) inputMdz.value = data.mendoza;
+    }
+  } catch (err) {
+    console.error("[admin] Error al leer config de WhatsApp:", err);
+  }
+}
+
+/**
+ * Valida y guarda los links de WhatsApp en config/whatsapp con merge.
+ */
+async function guardarConfigWhatsApp() {
+  try {
+    await obtenerTokenValido();
+    const inputSR = document.getElementById("wa-sanrafael-admin");
+    const inputMdz = document.getElementById("wa-mendoza-admin");
+    const sr = (inputSR ? inputSR.value : "").trim();
+    const mdz = (inputMdz ? inputMdz.value : "").trim();
+    const WA_PATTERN = /^https:\/\/(chat\.whatsapp\.com\/|wa\.me\/)/;
+    if (sr && !WA_PATTERN.test(sr)) {
+      alert("El link de San Rafael debe empezar con https://chat.whatsapp.com/ o https://wa.me/");
+      return;
+    }
+    if (mdz && !WA_PATTERN.test(mdz)) {
+      alert("El link de Gran Mendoza debe empezar con https://chat.whatsapp.com/ o https://wa.me/");
+      return;
+    }
+    await setDoc(
+      doc(db, "config", "whatsapp"),
+      {
+        sanrafael: sr || "",
+        mendoza: mdz || "",
+        actualizadoPor: auth.currentUser.email,
+        fecha: serverTimestamp(),
+      },
+      { merge: true },
+    );
+    alert("Links de WhatsApp guardados correctamente.");
+    await cargarConfigWhatsAppAdmin();
+  } catch (error) {
+    alert(describirErrorAdmin(error, "guardar los links de WhatsApp"));
+  }
 }
 
 /**
@@ -867,6 +924,12 @@ function initAdmin() {
         console.error("Error al cerrar sesión:", e);
       }
     });
+  }
+
+  // Guardar links de WhatsApp
+  const btnGuardarWa = document.getElementById("btn-guardar-whatsapp");
+  if (btnGuardarWa) {
+    btnGuardarWa.addEventListener("click", guardarConfigWhatsApp);
   }
 
   // 3. onAuthStateChanged como el ÚNICO listener encargado de alternar la visibilidad
