@@ -1,71 +1,97 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Agenda Cultural - Inicio</title>
-  <link rel="stylesheet" href="css/styles.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-</head>
-<body>
-  <header>
-    <div class="navbar">
-      <a href="index.html" class="logo">
-        <i class="fa-solid fa-calendar-days"></i> AgendaCultural
-      </a>
-      <nav class="nav-links">
-        <a href="sanrafael/index.html">San Rafael</a>
-        <a href="mendoza/index.html">Mendoza Capital</a>
-        <a href="admin/index.html"><i class="fa-solid fa-lock"></i> Admin</a>
-      </nav>
-    </div>
-  </header>
-
-  <main class="container">
-    <section class="hero">
-      <h1>Descubrí la Cultura en Cuyo</h1>
-      <p>Enterate de todos los eventos, recitales, obras de teatro y muestras de arte en un solo lugar. ¡Sumate a nuestra comunidad!</p>
-      <a href="https://whatsapp.com" target="_blank" class="btn btn-whatsapp">
-        <i class="fa-brands fa-whatsapp"></i> Unirse a los grupos de WhatsApp
-      </a>
-    </section>
-
-    <section class="page-header">
-      <div class="page-title">
-        <h2>Seleccioná tu localidad</h2>
-        <p>Elegí la ciudad para ver la agenda completa de eventos</p>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agenda Cultural - Inicio</title>
+    <link rel="stylesheet" href="css/styles.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+  </head>
+  <body>
+    <header>
+      <div class="navbar">
+        <a href="index.html" class="logo">
+          <i class="fa-solid fa-calendar-days"></i> AgendaCultural
+        </a>
+        <nav class="nav-links">
+          <a href="sanrafael/index.html">San Rafael</a>
+          <a href="mendoza/index.html">Gran Mendoza</a>
+          <a href="admin/index.html"><i class="fa-solid fa-lock"></i> Admin</a>
+        </nav>
       </div>
-    </section>
+    </header>
 
-    <div class="locations-grid">
-      <div class="location-card">
-        <img src="https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=600&q=80" alt="San Rafael">
-        <div class="location-card-content">
-          <div>
-            <h3>San Rafael</h3>
-            <p>Agenda de eventos culturales, peñas, teatro y recitales en el sur mendocino.</p>
+    <main class="container">
+      <section class="hero">
+        <h1>Descubrí la Cultura en Mendoza</h1>
+        <p>
+          Enterate de todos los eventos, recitales, obras de teatro cerca tuyo
+          en un solo lugar. ¡Sumate a nuestra comunidad!
+        </p>
+        <a href="https://whatsapp.com" target="_blank" class="btn btn-whatsapp">
+          <i class="fa-brands fa-whatsapp"></i> Unirse a los grupos de WhatsApp
+        </a>
+      </section>
+
+      <section class="page-header">
+        <div class="page-title">
+          <h2>Seleccioná tu localidad</h2>
+          <p>Elegí la ciudad para ver la agenda completa de eventos</p>
+        </div>
+      </section>
+
+      <div class="locations-grid">
+        <div class="location-card">
+          <img src="/assets/logoagendajpg.jpg" alt="San Rafael" />
+          <div class="location-card-content">
+            <div>
+              <h3>San Rafael</h3>
+              <p>
+                Agenda de eventos culturales, peñas, teatro y recitales en el
+                sur mendocino.
+              </p>
+            </div>
+            <a href="sanrafael/index.html" class="btn btn-primary"
+              >Ver Agenda San Rafael</a
+            >
           </div>
-          <a href="sanrafael/index.html" class="btn btn-primary">Ver Agenda San Rafael</a>
+        </div>
+
+        <div class="location-card">
+          <img src="assets/agendagranmendoza.PNG" />
+          <div class="location-card-content">
+            <div>
+              <h3>Gran Mendoza</h3>
+              <p>
+                Recitales, festivales, arte y movida cultural en el Gran
+                Mendoza.
+              </p>
+            </div>
+            <a href="mendoza/index.html" class="btn btn-primary"
+              >Ver Agenda Mendoza</a
+            >
+          </div>
+        </div>
+        <div class="location-card">
+          <img src="assets/agendazonaeste.PNG" />
+          <div class="location-card-content">
+            <div>
+              <h3>Zona Este</h3>
+              <h1>Proximamente</h1>
+              <p>Recitales, festivales, arte y en la Zona Este de Mendoza</p>
+            </div>
+          </div>
         </div>
       </div>
+    </main>
 
-      <div class="location-card">
-        <img src="https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=600&q=80" alt="Mendoza">
-        <div class="location-card-content">
-          <div>
-            <h3>Mendoza Capital</h3>
-            <p>Recitales, festivales, arte y movida cultural en el Gran Mendoza.</p>
-          </div>
-          <a href="mendoza/index.html" class="btn btn-primary">Ver Agenda Mendoza</a>
-        </div>
-      </div>
-    </div>
-  </main>
+    <footer>
+      <p>&copy; 2026 Agenda Cultural Cuyo. Todos los derechos reservados.</p>
+    </footer>
 
-  <footer>
-    <p>&copy; 2026 Agenda Cultural Cuyo. Todos los derechos reservados.</p>
-  </footer>
-
-  <script src="js/app.js"></script>
-</body>
+    <script src="js/app.js"></script>
+  </body>
 </html>
