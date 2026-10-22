@@ -7,7 +7,7 @@ import {
   query,
   where,
   serverTimestamp,
-  writeBatch
+  writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import {
   ref,
@@ -80,7 +80,7 @@ export async function subirEvento({
   const user = auth.currentUser;
   if (!user) {
     throw new Error(
-      "Debes iniciar sesión con tu cuenta de Google para publicar un evento."
+      "Debes iniciar sesión con tu cuenta de Google para publicar un evento.",
     );
   }
 
@@ -408,6 +408,22 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   await cargarEventos();
 
+  // Listener delegado para "Ver más" / "Ver menos" de descripciones largas
+
+  if (eventsGrid) {
+    eventsGrid.addEventListener("click", (e) => {
+      const btn = e.target.closest(".event-more");
+      if (!btn) return;
+      const card = btn.closest(".event-card");
+      const desc = card ? card.querySelector(".event-desc") : null;
+      if (!desc) return;
+      const expanded = btn.getAttribute("aria-expanded") === "true";
+      desc.classList.toggle("collapsed");
+      btn.setAttribute("aria-expanded", String(!expanded));
+      btn.textContent = !expanded ? "Ver menos" : "Ver más";
+    });
+  }
+
   // Gestión de Modal
   const modalOverlay = document.getElementById("upload-modal");
   const btnOpenUpload = document.getElementById("btn-open-upload");
@@ -424,8 +440,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       modalOverlay.classList.remove("active");
     });
   }
-
-
 
   // Selector nativo de fecha y hora al hacer clic en el campo (incluido ícono)
   const dateInput = document.getElementById("event-date");
@@ -464,22 +478,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     descTextarea.addEventListener("input", actualizarContadorDesc);
     actualizarContadorDesc();
-  }
-
-  // Listener delegado para "Ver más" / "Ver menos" de descripciones largas
-  const eventsGrid = document.getElementById("events-grid");
-  if (eventsGrid) {
-    eventsGrid.addEventListener("click", (e) => {
-      const btn = e.target.closest(".event-more");
-      if (!btn) return;
-      const card = btn.closest(".event-card");
-      const desc = card ? card.querySelector(".event-desc") : null;
-      if (!desc) return;
-      const expanded = btn.getAttribute("aria-expanded") === "true";
-      desc.classList.toggle("collapsed");
-      btn.setAttribute("aria-expanded", String(!expanded));
-      btn.textContent = !expanded ? "Ver menos" : "Ver más";
-    });
   }
 
   // Manejo del formulario de carga
