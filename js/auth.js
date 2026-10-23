@@ -68,23 +68,24 @@ export async function logout() {
  * @param {object|null} user Objeto del usuario o null si no está autenticado
  */
 export function updateAuthDOM(user) {
-  const authStep = document.getElementById("auth-step");
-  const eventForm = document.getElementById("event-form");
   const userLoggedEmail = document.getElementById("user-logged-email");
 
+  // Guarda el usuario actual para que otros módulos (eventos.js) lo consulten.
+  window.usuarioLogueado = user;
+
   if (user) {
-    if (authStep) authStep.style.display = "none";
-    if (eventForm) eventForm.style.display = "block";
     if (userLoggedEmail) {
       userLoggedEmail.textContent = `Autenticado: ${user.displayName || user.email}`;
     }
   } else {
-    if (authStep) authStep.style.display = "block";
-    if (eventForm) eventForm.style.display = "none";
     if (userLoggedEmail) {
       userLoggedEmail.textContent = "";
     }
   }
+
+  // Notifica a eventos.js para que decida qué paso del modal mostrar.
+  // updateAuthDOM ya no muestra u oculta pasos por sí solo.
+  document.dispatchEvent(new CustomEvent("agenda:auth", { detail: { user } }));
 }
 
 /**

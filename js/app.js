@@ -26,6 +26,17 @@ document.addEventListener("DOMContentLoaded", () => {
   if (btnOpenUpload) {
     btnOpenUpload.addEventListener("click", () => {
       modalOverlay.classList.add("active");
+      // Always show the planes step first, regardless of auth state
+      // The plan selection logic in eventos.js will navigate to auth/form later
+      if (plansStep) plansStep.style.display = "block";
+      if (authStep) authStep.style.display = "none";
+      if (eventForm) eventForm.style.display = "none";
+      if (exitoStep) exitoStep.style.display = "none";
+      // Request plan selection from eventos module
+      if (typeof window.mostrarPaso === "function") {
+        window.mostrarPaso("planes");
+      }
+      // Still update UI elements like user display
       checkAuthState();
     });
   }

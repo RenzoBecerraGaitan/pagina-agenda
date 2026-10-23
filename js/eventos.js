@@ -1,8 +1,10 @@
 // Lógica de carga, consulta y renderizado de eventos con Firebase Firestore y Storage
 import { db, storage, auth, firebaseConfig } from "./firebase-config.js";
+import { normalizarTelefonoAR, escapeHtml } from "./utils.js";
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   query,
   where,
@@ -37,6 +39,94 @@ export const MAX_DESCRIPCION = 300;
 export const DESCRIPCION_CORTA = 140;
 
 /**
+ * Única fuente de verdad de los planes de publicación.
+ * id: "gratuito" | "destacado" | "premium" | "personalizado" | "sponsor".
+ * tipo: "gratuito" | "pago" | "whatsapp".
+ */
+export const PLANES = [
+  {
+    id: "gratuito",
+    tipo: "gratuito",
+    nombre: "Plan Gratuito",
+    titulo: "🟢 Plan Gratuito",
+    precio: null,
+    beneficios: [
+      "Publicación en la página web.",
+      "Difusión en los grupos de WhatsApp correspondientes a la zona del evento.",
+    ],
+    requisito:
+      "⚠️ Requisito: Los eventos deben cargarse con un mínimo de 2 días de anticipación a su realización para garantizar su procesamiento.",
+    btnTexto: "Continuar con Plan Gratuito",
+  },
+  {
+    id: "destacado",
+    tipo: "pago",
+    nombre: "Plan Destacado",
+    titulo: "⭐ Plan Destacado — $10.000",
+    precio: 10000,
+    beneficios: [
+      "Publicación prioritaria en los grupos de WhatsApp de la zona del evento.",
+      "Ubicación prioritaria en la web como Evento Destacado (ordenados por fecha más próxima).",
+      "Difusión gratuita adicional el día del evento.",
+    ],
+    btnTexto: "Seleccionar Plan Destacado",
+  },
+  {
+    id: "premium",
+    tipo: "pago",
+    nombre: "Plan Premium",
+    titulo: "🚀 Plan Premium + Instagram — $15.000",
+    precio: 15000,
+    beneficios: [
+      "Publicación prioritaria en grupos de WhatsApp e Instagram.",
+      "Ubicación prioritaria en la web como Evento Destacado (ordenados por fecha más próxima).",
+      "Difusión gratuita adicional el día del evento.",
+    ],
+    btnTexto: "Seleccionar Plan Premium",
+  },
+  {
+    id: "personalizado",
+    tipo: "whatsapp",
+    nombre: "Planes Personalizados",
+    titulo: "📦 Planes Personalizados",
+    precio: null,
+    subtitulo:
+      "Descuentos mensuales ideales para cartelera continua, productoras, teatros o múltiples publicaciones.",
+    beneficios: [],
+    btnTexto: "Consultar Planes Personalizados",
+    waMensaje: "Hola! Quiero más información sobre los planes personalizados.",
+  },
+  {
+    id: "sponsor",
+    tipo: "whatsapp",
+    nombre: "Sponsors",
+    titulo: "🤝 Sponsors",
+    precio: null,
+    subtitulo:
+      "Posiciona tu marca en toda nuestra red de difusión regional y provincial.",
+    beneficios: [],
+    btnTexto: "Quiero ser Sponsor",
+    waMensaje: "Hola! Quiero ser sponsor de la agenda.",
+  },
+];
+
+/**
+ * Devuelve la fecha local de hoy sumada `dias` días, en formato "AAAA-MM-DD".
+ * Usa la fecha LOCAL del navegador (misma lógica que fechaLocalHoy).
+ * @param {number} dias
+ * @returns {string}
+ */
+export function fechaLocalMasDias(dias) {
+  const ahora = new Date();
+  ahora.setDate(ahora.getDate() + dias);
+  const año = ahora.getFullYear();
+  const mes = String(ahora.getMonth() + 1).padStart(2, "0");
+  const día = String(ahora.getDate()).padStart(2, "0");
+  return `${año}-${mes}-${día}`;
+}
+
+
+/**
  * Arma la URL de Google Maps para un evento.
  * Une con ", " los datos no vacíos de [lugar, direccion, localidad, "Mendoza, Argentina"]
  * y devuelve el enlace de búsqueda.
@@ -55,51 +145,10 @@ export function construirUrlMaps(ev) {
 }
 
 /**
- * Normaliza un teléfono de contacto argentino a formato 549 + 10 dígitos.
- * Devuelve el número limpio o null si no es un móvil válido.
- * @param {string|null|undefined} contacto
- * @returns {string|null}
+ * normalizarTelefonoAR y escapeHtml ahora viven en js/utils.js (se importan al
+ * inicio de este módulo) para poder reusarlas desde admin.js sin efectos
+ * secundarios de DOM.
  */
-export function normalizarTelefonoAR(contacto) {
-  if (!contacto) return null;
-  let digitos = String(contacto).replace(/\D/g, "");
-  if (digitos.startsWith("00")) {
-    digitos = digitos.slice(2);
-  }
-  if (digitos.startsWith("549") && digitos.length === 13) {
-    return digitos;
-  }
-  if (digitos.startsWith("54") && digitos.length === 12) {
-    return "549" + digitos.slice(2);
-  }
-  if (!digitos.startsWith("54")) {
-    if (digitos.startsWith("0")) {
-      digitos = digitos.slice(1);
-    }
-    if (digitos.length === 10) {
-      return "549" + digitos;
-    }
-  }
-  if (/^549\d{10}$/.test(digitos)) {
-    return digitos;
-  }
-  return null;
-}
-
-/**
- * Escapa HTML para prevenir XSS al insertar texto de usuario con innerHTML.
- * @param {string|null|undefined} texto
- * @returns {string}
- */
-function escapeHtml(texto) {
-  if (texto === null || texto === undefined) return "";
-  return String(texto)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
 
 /**
  * Devuelve la fecha local de hoy en formato "AAAA-MM-DD".
@@ -364,6 +413,230 @@ export async function subirEvento({
  * - Trae eventos con estado == 'aprobado', ubicacion coincidente y fecha >= hoy.
  * - Ordena poniendo primero los que tengan destacado == true.
  */
+// Estado del flujo de carga dentro de la sesión actual del modal.
+let planElegido = null; // objeto de PLANES o null
+let usuarioLogueado = null; // usuario de Firebase o null
+let numeroConsultasCache = null; // numero de WhatsApp para consultas/pagos
+let cacheConfigWhatsapp = null; // cache en memoria de config/whatsapp
+
+/**
+ * Lee config/whatsapp de Firestore (con cache simple en memoria) para obtener
+ * el numero de WhatsApp de consultas y pagos (numeroConsultas).
+ * @returns {Promise<string|null>}
+ */
+async function obtenerNumeroConsultas() {
+  if (cacheConfigWhatsapp) {
+    return cacheConfigWhatsapp.numeroConsultas || null;
+  }
+  try {
+    const snap = await getDoc(doc(db, "config", "whatsapp"));
+    if (snap.exists()) {
+      cacheConfigWhatsapp = snap.data();
+      return cacheConfigWhatsapp.numeroConsultas || null;
+    }
+  } catch (error) {
+    console.error("[eventos] Error al leer config de WhatsApp:", error);
+  }
+  return null;
+}
+
+// Genera el HTML de una tarjeta de plan.
+// @param {object} plan
+// @returns {string}
+function generarPlanCard(plan) {
+  const esPago = plan.tipo === "pago";
+  const precioHTML =
+    plan.precio !== null
+      ? `<span class="plan-precio">$${plan.precio.toLocaleString("es-AR")}</span>`
+      : "";
+  const beneficiosHTML = plan.beneficios
+    .map((b) => `<li>${escapeHtml(b)}</li>`)
+    .join("");
+  const requisitoHTML = plan.requisito
+    ? `<p class="plan-requisito">${escapeHtml(plan.requisito)}</p>`
+    : "";
+  const subtituloHTML = plan.subtitulo
+    ? `<p class="plan-subtitulo">${escapeHtml(plan.subtitulo)}</p>`
+    : "";
+  const claseBtn = esPago
+    ? "btn-plan pago"
+    : plan.tipo === "whatsapp"
+      ? "btn-plan whatsapp"
+      : "btn-plan gratuito";
+
+  return `
+    <article class="plan-card${esPago ? " pago" : ""}">
+      <div class="plan-titulo">${escapeHtml(plan.titulo)}${precioHTML}</div>
+      ${subtituloHTML}
+      ${beneficiosHTML.length > 0 ? `<ul class="plan-beneficios">${beneficiosHTML}</ul>` : ""}
+      ${requisitoHTML}
+      <button
+        type="button"
+        id="btn-plan-${plan.id}"
+        class="${claseBtn}"
+        style="min-height: 48px;"
+      >
+        ${escapeHtml(plan.btnTexto)}
+      </button>
+    </article>
+  `;
+}
+
+// Renderiza la pantalla de planes dentro de #plans-step y vincula los eventos.
+function renderizarPlanesStep() {
+  const contenedor = document.getElementById("plans-step");
+  if (!contenedor) return;
+  contenedor.innerHTML = `
+    <div class="planes-header">
+      <h3 class="planes-titulo">🎭 Elige el plan ideal para tu evento</h3>
+      <p class="planes-subtitulo">Antes de completar los datos, selecciona la modalidad de publicación que mejor se adapte a tus necesidades:</p>
+    </div>
+    <div class="planes-lista" id="planes-lista">
+      ${PLANES.map(generarPlanCard).join("")}
+    </div>
+  `;
+  PLANES.forEach((plan) => {
+    const btn = document.getElementById(`btn-plan-${plan.id}`);
+    if (btn) {
+      btn.addEventListener("click", () => seleccionarPlan(plan));
+    }
+  });
+  aplicarDisponibilidadWhatsapp();
+}
+
+// Selecciona un plan gratuito/pago o abre WhatsApp directo para planes tipo whatsapp.
+// @param {object} plan
+function seleccionarPlan(plan) {
+  planElegido = plan;
+
+  if (plan.tipo === "whatsapp") {
+    abrirWhatsAppDirecto(plan.waMensaje);
+    return;
+  }
+
+  // Gratuito, Destacado o Premium: si hay sesion se va al form, si no, al login.
+  if (usuarioLogueado) {
+    mostrarPaso("form");
+  } else {
+    mostrarPaso("auth");
+  }
+}
+
+// Abre WhatsApp en pestaña nueva para planes personalizados / sponsors.
+// @param {string} mensaje
+function abrirWhatsAppDirecto(mensaje) {
+  if (!numeroConsultasCache) return;
+  const url = `https://wa.me/${numeroConsultasCache}?text=${encodeURIComponent(mensaje)}`;
+  window.open(url, "_blank", "noopener");
+}
+
+// Habilita/deshabilita los botones de planes tipo WhatsApp segun si hay numero
+// de contacto configurado. Cuando no hay, se deshabilitan con un texto claro.
+function aplicarDisponibilidadWhatsapp() {
+  const disponible = !!numeroConsultasCache;
+  PLANES.filter((p) => p.tipo === "whatsapp").forEach((plan) => {
+    const btn = document.getElementById(`btn-plan-${plan.id}`);
+    if (!btn) return;
+    if (!disponible) {
+      btn.disabled = true;
+      btn.textContent = "Contacto no disponible por el momento";
+    } else {
+      btn.disabled = false;
+      btn.textContent = plan.btnTexto;
+    }
+  });
+}
+
+// Muestra un solo paso del modal: "planes" | "auth" | "form" | "exito".
+// @param {"planes"|"auth"|"form"|"exito"} paso
+function mostrarPaso(paso) {
+  const plansStep = document.getElementById("plans-step");
+  const authStep = document.getElementById("auth-step");
+  const eventForm = document.getElementById("event-form");
+  const exitoStep = document.getElementById("exito-step");
+  const aviso = document.getElementById("plan-actual-aviso");
+
+  [plansStep, authStep, eventForm, exitoStep].forEach((el) => {
+    if (el) el.style.display = "none";
+  });
+  if (aviso) aviso.style.display = "none";
+
+  switch (paso) {
+    case "planes":
+      if (plansStep) plansStep.style.display = "block";
+      break;
+    case "auth":
+      if (authStep) authStep.style.display = "block";
+      break;
+    case "form":
+      if (eventForm) eventForm.style.display = "block";
+      if (aviso && planElegido) {
+        aviso.style.display = "flex";
+        aviso.innerHTML = `Plan elegido: <strong>${escapeHtml(
+          planElegido.titulo,
+        )}</strong> <a href="#" id="btn-cambiar-plan" style="color: var(--primary); text-decoration: underline; cursor: pointer; margin-left: 0.5rem;">Cambiar plan</a>`;
+        const btnCambiar = document.getElementById("btn-cambiar-plan");
+        if (btnCambiar) {
+          btnCambiar.addEventListener("click", (e) => {
+            e.preventDefault();
+            mostrarPaso("planes");
+          });
+        }
+      }
+      actualizarFechaMinPorPlan();
+      break;
+    case "exito":
+      if (exitoStep) exitoStep.style.display = "block";
+      break;
+  }
+}
+
+// Actualiza el min del campo fecha y el aviso segun el plan elegido.
+// Si la fecha ya elegida deja de ser valida, se limpia y se avisa.
+function actualizarFechaMinPorPlan() {
+  if (!dateInput) return;
+  const hint = document.getElementById("fecha-hint-gratuito");
+  const esGratuito = planElegido && planElegido.id === "gratuito";
+  const minStr = esGratuito ? fechaLocalMasDias(2) : fechaLocalHoy();
+
+  dateInput.min = minStr;
+  if (hint) hint.style.display = esGratuito ? "block" : "none";
+
+  if (dateInput.value && dateInput.value < minStr) {
+    dateInput.value = "";
+    alert(
+      "La fecha seleccionada no es valida para el plan elegido y se ha limpiado.",
+    );
+  }
+}
+
+// Renderiza el paso "exito" para planes pagos.
+// @param {string|null} urlWhatsApp
+function renderizarExito(urlWhatsApp) {
+  const exito = document.getElementById("exito-step");
+  if (!exito) return;
+  const botonWa = urlWhatsApp
+    ? `<a href="${urlWhatsApp}" target="_blank" rel="noopener noreferrer" id="btn-exito-whatsapp" class="btn btn-primary" style="width: 100%; justify-content: center; margin-bottom: 0.75rem;">Continuar por WhatsApp</a>`
+    : `<button type="button" id="btn-exito-whatsapp" class="btn btn-primary" style="width: 100%; justify-content: center; margin-bottom: 0.75rem;" disabled>Contacto no disponible por el momento</button>`;
+  exito.innerHTML = `
+    <div style="text-align: center; padding: 1rem 0;">
+      <h3 style="margin-bottom: 0.5rem">¡Evento guardado!</h3>
+      <p style="color: var(--text-muted); margin-bottom: 1rem; font-size: 0.95rem;">
+        ¡Tu evento se guardó! Para activar el plan y coordinar el pago, continuá por WhatsApp.
+      </p>
+      ${botonWa}
+      <button type="button" id="btn-exito-cerrar" class="btn btn-outline" style="width: 100%; justify-content: center;">Cerrar</button>
+    </div>
+  `;
+  const btnCerrar = document.getElementById("btn-exito-cerrar");
+  if (btnCerrar) {
+    btnCerrar.addEventListener("click", () => {
+      if (modalOverlay) modalOverlay.classList.remove("active");
+      mostrarPaso("planes");
+    });
+  }
+}
+
 export async function consultarEventosPublicos(ubicacion) {
   const hoy = fechaLocalHoy();
 
@@ -385,7 +658,14 @@ export async function consultarEventosPublicos(ubicacion) {
       const destA = Boolean(a.destacado);
       const destB = Boolean(b.destacado);
       if (destA !== destB) return destA ? -1 : 1;
-      return (a.fecha || "").localeCompare(b.fecha || "");
+      const fechaA = a.fecha || "";
+      const fechaB = b.fecha || "";
+      const comparacionFecha = fechaA.localeCompare(fechaB);
+      if (comparacionFecha !== 0) return comparacionFecha;
+      // Si las fechas son iguales, ordenar por hora (HH:MM)
+      const horaA = a.hora || "";
+      const horaB = b.hora || "";
+      return horaA.localeCompare(horaB);
     });
 
     return eventos;
@@ -579,7 +859,14 @@ function obtenerEventosDeMuestra(ubicacion, fechaHoy) {
     )
     .sort((a, b) => {
       if (a.destacado !== b.destacado) return a.destacado ? -1 : 1;
-      return (a.fecha || "").localeCompare(b.fecha || "");
+      const fechaA = a.fecha || "";
+      const fechaB = b.fecha || "";
+      const comparacionFecha = fechaA.localeCompare(fechaB);
+      if (comparacionFecha !== 0) return comparacionFecha;
+      // Si las fechas son iguales, ordenar por hora (HH:MM)
+      const horaA = a.hora || "";
+      const horaB = b.hora || "";
+      return horaA.localeCompare(horaB);
     });
 }
 
