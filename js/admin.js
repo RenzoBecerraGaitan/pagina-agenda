@@ -1,6 +1,7 @@
 // Panel de Control y Administración de Eventos (/admin)
 import { db, storage, auth, firebaseConfig } from "./firebase-config.js";
 import { googleProvider } from "./auth.js";
+import { fechaLocalHoy } from "./eventos.js";
 import {
   signInWithPopup,
   signOut,
@@ -422,7 +423,7 @@ export async function cargarYRenderizarEventos() {
     todosLosEventos = obtenerEventosLocales();
   }
 
-  const hoy = new Date().toISOString().split("T")[0];
+  const hoy = fechaLocalHoy();
 
   // Clasificación en las 3 pestañas solicitadas
   const pendientes = todosLosEventos.filter((ev) => ev.estado === "pendiente");

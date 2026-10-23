@@ -52,6 +52,21 @@ function escapeHtml(texto) {
 }
 
 /**
+ * Devuelve la fecha local de hoy en formato "AAAA-MM-DD".
+ * Usa getFullYear/getMonth/getDate de la fecha LOCAL del navegador.
+ * NO usar toISOString() porque usa UTC y desde las 21:00 en Argentina
+ * devuelve el día siguiente.
+ * @returns {string}
+ */
+export function fechaLocalHoy() {
+  const ahora = new Date();
+  const año = ahora.getFullYear();
+  const mes = String(ahora.getMonth() + 1).padStart(2, "0");
+  const día = String(ahora.getDate()).padStart(2, "0");
+  return `${año}-${mes}-${día}`;
+}
+
+/**
  * Comprime una imagen a WebP (o JPEG si el navegador no soporta WebP).
  * - Lado mayor <= 1280 px y calidad ~0.8.
  * - Usa createImageBitmap y canvas.toBlob.
@@ -211,6 +226,18 @@ export async function subirEvento({
     );
   }
 
+  // Validación de fecha: no anterior a hoy
+  const hoyStr = fechaLocalHoy();
+  if (fecha && fecha < hoyStr) {
+    throw new Error("La fecha no puede ser anterior a hoy.");
+  }
+
+  // Validación de hora: minutos 00, 15, 30 o 45
+  const HORA_REGEX = /^([01]\d|2[0-3]):(00|15|30|45)$/;
+  if (hora && !HORA_REGEX.test(hora)) {
+    throw new Error("Elegí una hora con minutos 00, 15, 30 o 45.");
+  }
+
   const descripcionLimpia = (descripcion || "").trim();
   if (descripcionLimpia.length > MAX_DESCRIPCION) {
     throw new Error(
@@ -288,7 +315,7 @@ export async function subirEvento({
  * - Ordena poniendo primero los que tengan destacado == true.
  */
 export async function consultarEventosPublicos(ubicacion) {
-  const hoy = new Date().toISOString().split("T")[0];
+  const hoy = fechaLocalHoy();
 
   try {
     const consulta = query(
@@ -557,6 +584,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   if (btnOpenUpload && modalOverlay) {
     btnOpenUpload.addEventListener("click", () => {
+      establecerFechaMin();
       modalOverlay.classList.add("active");
     });
   }
@@ -570,6 +598,20 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Selector nativo de fecha y hora al hacer clic en el campo (incluido ícono)
   const dateInput = document.getElementById("event-date");
   const timeInput = document.getElementById("event-time");
+
+  // Fecha: bloquear días anteriores a hoy (min). Se actualiza al cargar y al
+  // abrir el modal por si la página queda abierta pasada la medianoche.
+  function establecerFechaMin() {
+    if (dateInput) {
+      dateInput.min = fechaLocalHoy();
+    }
+  }
+  establecerFechaMin();
+
+  if (timeInput) {
+    timeInput.step = "900";
+  }
+
   [dateInput, timeInput].forEach((input) => {
     if (input) {
       input.style.cursor = "pointer";
@@ -582,6 +624,61 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
     }
   });
+
+  // Hora: redondear al cuarto de hora más cercano en change (fallback para
+  // Safari/Firefox que no respetan step="900").
+  const TIME_REGEX = /^([01]\d|2[0-3]):(00|15|30|45)$/;
+  const ajustarHora = () => {
+    if (!timeInput || !timeInput.value) return;
+    const m = /^(\d{2}):(\d{2})$/.exec(timeInput.value);
+    if (!m) return;
+    let h = parseInt(m[1], 10);
+    let min = parseInt(m[2], 10);
+    const total = h * 60 + min;
+    const redondeado = Math.round(total / 15) * 15;
+    let nh = Math.floor(redondeado / 60);
+    let nmin = redondeado % 60;
+    if (nh >= 24) {
+      nh = 23;
+      nmin = 45;
+    }
+    const nuevo = `${String(nh).padStart(2, "0")}:${String(nmin).padStart(2, "0")}`;
+    if (nuevo !== timeInput.value) {
+      timeInput.value = nuevo;
+      const aviso = document.getElementById("time-ajuste-aviso");
+      if (aviso) {
+        aviso.textContent = `Se ajustó a las ${nuevo}`;
+        aviso.style.display = "block";
+      }
+    } else if (TIME_REGEX.test(timeInput.value)) {
+      const aviso = document.getElementById("time-ajuste-aviso");
+      if (aviso) aviso.style.display = "none";
+    }
+  };
+
+  if (timeInput) {
+    timeInput.addEventListener("change", ajustarHora);
+  }
+
+  // Línea de ayuda debajo del campo de hora
+  if (timeInput) {
+    const ayuda = document.createElement("p");
+    ayuda.id = "time-ayuda";
+    ayuda.style =
+      "font-size: 0.75rem; color: var(--text-muted); margin: 0.25rem 0 0 0;";
+    ayuda.textContent =
+      "Los horarios van de 15 en 15 minutos (00, 15, 30, 45)";
+    timeInput.parentNode.insertBefore(ayuda, timeInput.nextSibling);
+
+    const avisoAjuste = document.createElement("p");
+    avisoAjuste.id = "time-ajuste-aviso";
+    avisoAjuste.style =
+      "font-size: 0.75rem; color: var(--primary); margin: 0.25rem 0 0 0; display: none;";
+    ayuda.parentNode.insertBefore(avisoAjuste, ayuda.nextSibling);
+  }
+
+  // Al abrir el modal, refrescar el min de fecha (por si pasó la medianoche)
+
 
   // Contador en vivo de la descripción
   const descTextarea = document.getElementById("event-desc");
@@ -646,6 +743,24 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       const btnSubmit = eventForm.querySelector('button[type="submit"]');
       const originalBtnText = btnSubmit ? btnSubmit.innerHTML : "Enviar Evento";
+
+      // Validación de fecha: no anterior a hoy
+      const hoyStr = fechaLocalHoy();
+      if (fecha && fecha < hoyStr) {
+        btnSubmit.disabled = false;
+        btnSubmit.innerHTML = originalBtnText;
+        alert("La fecha no puede ser anterior a hoy.");
+        return;
+      }
+
+      // Validación de hora: minutos 00, 15, 30 o 45
+      const HORA_REGEX = /^([01]\d|2[0-3]):(00|15|30|45)$/;
+      if (hora && !HORA_REGEX.test(hora)) {
+        btnSubmit.disabled = false;
+        btnSubmit.innerHTML = originalBtnText;
+        alert("Elegí una hora con minutos 00, 15, 30 o 45.");
+        return;
+      }
 
       try {
         if (btnSubmit) {
