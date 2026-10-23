@@ -145,6 +145,83 @@ header {
   margin-left: auto;
   margin-right: auto;
 }
+/* ==========================================
+   SEO Keywords Section (Base Mobile)
+   ========================================== */
+.seo-keywords-section {
+  background-color: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.5rem 1rem;
+  margin-top: 2.5rem;
+  margin-bottom: 2rem;
+  transition: var(--transition);
+}
+
+.seo-container {
+  width: 100%;
+  margin: 0 auto;
+}
+
+.seo-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  line-height: 1.3;
+}
+
+.seo-title i {
+  color: var(--primary);
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.seo-text {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+}
+
+.seo-text:last-child {
+  margin-bottom: 0;
+}
+
+.seo-text strong {
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+/* Badges de Categorías SEO (Mobile) */
+.seo-badges-wrapper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1.25rem 0;
+}
+
+.seo-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background-color: var(--bg-color);
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+  padding: 0.35rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.seo-badge i {
+  color: var(--primary);
+  font-size: 0.75rem;
+}
 
 /* Buttons */
 .btn {
@@ -668,5 +745,74 @@ footer {
 @media (min-width: 1024px) {
   .events-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* ==========================================
+   Media Queries Adaptados
+   ========================================== */
+
+/* Media Queries for Tablet & Desktop */
+@media (min-width: 768px) {
+  .locations-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .events-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .form-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .page-header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .hero h1 {
+    font-size: 2.5rem;
+  }
+
+  .admin-item {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  /* Ajustes SEO para Tablet */
+  .seo-keywords-section {
+    padding: 2.25rem 1.75rem;
+    margin-top: 3.5rem;
+  }
+
+  .seo-title {
+    font-size: 1.4rem;
+  }
+
+  .seo-text {
+    font-size: 0.95rem;
+    line-height: 1.7;
+  }
+
+  .seo-badge {
+    font-size: 0.85rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .events-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  /* Ajustes SEO para Desktop */
+  .seo-container {
+    max-width: 960px;
+  }
+
+  .seo-keywords-section {
+    padding: 2.5rem 2rem;
   }
 }

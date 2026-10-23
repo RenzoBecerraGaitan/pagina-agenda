@@ -3,7 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Agenda Cultural - San Rafael</title>
+    <meta
+      name="description"
+      content="¿Buscás qué hacer en San Rafael, General Alvear o Malargüe? Consultá la agenda del Sur mendocino con eventos, recitales, peñas, teatro y sunsets."
+    />
+    <title>
+      Qué hacer en San Rafael, Alvear y Malargüe | Agenda del Sur Mendocino
+    </title>
     <link rel="stylesheet" href="../css/styles.css" />
     <link
       rel="stylesheet"
@@ -29,8 +35,11 @@
     <main class="container">
       <section class="page-header">
         <div class="page-title">
-          <h2>San Rafael</h2>
-          <p>Eventos culturales y artísticos en el sur mendocino</p>
+          <h1>Qué hacer en el Sur Mendocino: San Rafael, Alvear y Malargüe</h1>
+          <p>
+            Descubrí todos los recitales, peñas, obras de teatro, festivales y
+            shows cerca tuyo
+          </p>
         </div>
         <button id="btn-open-upload" class="btn btn-primary">
           <i class="fa-solid fa-plus-circle"></i> Cargar Evento
@@ -40,6 +49,63 @@
       <section>
         <div id="events-grid" class="events-grid">
           <!-- Events will be rendered dynamically via app.js -->
+        </div>
+      </section>
+
+      <!-- BLOQUE SEO LOCAL SUR MENDOCINO -->
+      <section class="seo-keywords-section">
+        <div class="seo-container">
+          <h2 class="seo-title">
+            <i class="fa-solid fa-compass"></i> Cartelera de espectáculos y
+            actividades en San Rafael, General Alvear y Malargüe
+          </h2>
+
+          <p class="seo-text">
+            Si estás buscando
+            <strong>qué hacer este fin de semana en el Sur de Mendoza</strong>,
+            aquí vas a encontrar la agenda más completa. Publicamos desde
+            <strong>obras de teatro en el Teatro Roma</strong> y
+            <strong>recitales en San Rafael</strong>, hasta festivales, peñas y
+            eventos culturales en <strong>General Alvear</strong> y
+            <strong>Malargüe</strong>.
+          </p>
+
+          <div class="seo-badges-wrapper">
+            <span class="seo-badge"
+              ><i class="fa-solid fa-masks-theater"></i> Teatro & Centros
+              Culturales</span
+            >
+            <span class="seo-badge"
+              ><i class="fa-solid fa-music"></i> Recitales & Peñas
+              Folclóricas</span
+            >
+            <span class="seo-badge"
+              ><i class="fa-solid fa-glass-cheers"></i> Catas & Shows en
+              Bodegas</span
+            >
+            <span class="seo-badge"
+              ><i class="fa-solid fa-cloud-sun"></i> Sunsets & Outings</span
+            >
+            <span class="seo-badge"
+              ><i class="fa-solid fa-beer-mug-empty"></i> Patios
+              Cerveceros</span
+            >
+            <span class="seo-badge"
+              ><i class="fa-solid fa-utensils"></i> Ferias Gastronómicas &
+              Festivales</span
+            >
+          </div>
+
+          <p class="seo-text">
+            Reunimos eventos de la <strong>Ciudad de San Rafael</strong> y sus
+            distritos (<strong
+              >Valle Grande, Villa 25 de Mayo, Rama Caída, Las Paredes, Cuadro
+              Benegas</strong
+            >), junto a las actividades destacadas de
+            <strong>General Alvear</strong> y la oferta turística y cultural de
+            <strong>Malargüe</strong>. Encontrá toques en vivo, fiestas, peñas,
+            ferias de artesanos y espectáculos infantiles en un solo lugar.
+          </p>
         </div>
       </section>
     </main>
@@ -125,7 +191,7 @@
                 type="text"
                 id="event-title"
                 class="form-control"
-                placeholder="Ej: Concierto de Rock en Vivo"
+                placeholder="Ej: Airbag en vivo"
                 required
               />
             </div>
@@ -179,7 +245,7 @@
                 type="text"
                 id="event-address"
                 class="form-control"
-                placeholder="Ej: Hipólito Yrigoyen 280"
+                placeholder="Ej: Av. San Martín 280"
                 required
               />
             </div>
@@ -196,22 +262,22 @@
             <div class="form-group">
               <label for="event-contact">Contacto (Teléfono / Redes)</label>
               <input
-                type="text"
+                type="number"
                 id="event-contact"
                 class="form-control"
-                placeholder="Ej: +54 9 260 4000000"
+                placeholder="Ej: 2610000000"
                 required
               />
             </div>
 
             <div class="form-group">
-              <label>Verificación Captcha</label>
+              <label>checkbox</label>
               <div class="captcha-box">
                 <input type="checkbox" id="captcha-check" required />
                 <label
                   for="captcha-check"
                   style="margin: 0; font-weight: normal; cursor: pointer"
-                  >No soy un robot (reCAPTCHA simulado)</label
+                  >Confirmo que todos los datos ingresados son correctos</label
                 >
               </div>
             </div>
@@ -223,8 +289,16 @@
             >
               Enviar Evento
             </button>
-            <p style="font-size: 0.8rem; color: var(--text-muted); text-align: center; margin-top: 0.75rem;">
-              Al publicar se registra tu correo de Google con fines de moderación.
+            <p
+              style="
+                font-size: 0.8rem;
+                color: var(--text-muted);
+                text-align: center;
+                margin-top: 0.75rem;
+              "
+            >
+              Al publicar se registra tu correo de Google con fines de
+              moderación.
             </p>
           </form>
         </div>
@@ -232,7 +306,7 @@
     </div>
 
     <footer>
-      <p>&copy; 2026 Agenda Cultural Cuyo. Todos los derechos reservados.</p>
+      <p>&copy; 2026 Agenda Cultural Mendoza. Todos los derechos reservados.</p>
     </footer>
 
     <script type="module" src="../js/auth.js"></script>
