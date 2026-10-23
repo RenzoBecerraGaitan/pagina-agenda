@@ -420,6 +420,38 @@ let numeroConsultasCache = null; // numero de WhatsApp para consultas/pagos
 let cacheConfigWhatsapp = null; // cache en memoria de config/whatsapp
 
 /**
+ * Listener del evento agenda:auth despachado desde auth.js.
+ * Actualiza el estado del usuario y navega al paso correspondiente.
+ * @param {CustomEvent} e - Evento con detail.user
+ */
+export function initAuthListener() {
+  document.addEventListener("agenda:auth", (e) => {
+    const user = e.detail.user;
+    usuarioLogueado = user;
+
+    if (user) {
+      // Usuario logueado: si ya hay plan elegido, ir al formulario
+      if (planElegido) {
+        mostrarPaso("form");
+      }
+      // Actualizar UI: ocultar paso auth si estamos en planes
+      const plansStep = document.getElementById("plans-step");
+      const authStep = document.getElementById("auth-step");
+      if (plansStep && authStep) {
+        authStep.style.display = "none";
+      }
+    } else {
+      // Usuario deslogueado: volver al paso de planes
+      if (planElegido) {
+        mostrarPaso("planes");
+      }
+    }
+  });
+}
+
+/**
+
+/**
  * Lee config/whatsapp de Firestore (con cache simple en memoria) para obtener
  * el numero de WhatsApp de consultas y pagos (numeroConsultas).
  * @returns {Promise<string|null>}
@@ -1133,3 +1165,4 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 });
+
