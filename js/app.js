@@ -76,12 +76,12 @@ document.addEventListener("DOMContentLoaded", () => {
   function checkAuthState() {
     const user = localStorage.getItem("agenda_user");
     if (user) {
-      if (authStep) authStep.style.display = "none";
-      if (eventForm) eventForm.style.display = "block";
-      if (userLoggedEmail) userLoggedEmail.textContent = `Autenticado: ${user}`;
+      // Usuario logueado: dispata evento para que eventos.js navegue al formulario
+      // Esto respetará la lógica de planElegido y mostrará el paso correcto
+      document.dispatchEvent(new CustomEvent("agenda:auth", { detail: { user } }));
     } else {
-      if (authStep) authStep.style.display = "block";
-      if (eventForm) eventForm.style.display = "none";
+      // Usuario deslogueado: volver al paso de planes si hay plan elegido
+      document.dispatchEvent(new CustomEvent("agenda:auth", { detail: { user: null } }));
     }
   }
 
