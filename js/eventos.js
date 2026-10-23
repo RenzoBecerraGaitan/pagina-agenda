@@ -614,7 +614,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       const captchaCheck = document.getElementById("captcha-check");
       if (captchaCheck && !captchaCheck.checked) {
-        alert("Por favor verifica el Captcha antes de continuar.");
+        alert("Por favor verifica el checkbox antes de continuar.");
         return;
       }
 
@@ -670,7 +670,8 @@ document.addEventListener("DOMContentLoaded", async () => {
           "¡Evento enviado con éxito! Quedará pendiente de aprobación por el moderador.",
         );
         eventForm.reset();
-        actualizarContadorDesc();
+        const campoDesc = document.getElementById("event-desc");
+        if (campoDesc) campoDesc.dispatchEvent(new Event("input"));
 
         if (modalOverlay) {
           modalOverlay.classList.remove("active");
