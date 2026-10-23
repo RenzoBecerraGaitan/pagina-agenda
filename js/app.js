@@ -22,6 +22,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnLogout = document.getElementById("btn-logout");
   const userLoggedEmail = document.getElementById("user-logged-email");
 
+  const plansStep = document.getElementById("plans-step");
+  const exitoStep = document.getElementById("exito-step");
   // Open modal
   if (btnOpenUpload) {
     btnOpenUpload.addEventListener("click", () => {
@@ -78,10 +80,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (user) {
       // Usuario logueado: dispata evento para que eventos.js navegue al formulario
       // Esto respetará la lógica de planElegido y mostrará el paso correcto
-      document.dispatchEvent(new CustomEvent("agenda:auth", { detail: { user } }));
+      document.dispatchEvent(
+        new CustomEvent("agenda:auth", { detail: { user } }),
+      );
     } else {
       // Usuario deslogueado: volver al paso de planes si hay plan elegido
-      document.dispatchEvent(new CustomEvent("agenda:auth", { detail: { user: null } }));
+      document.dispatchEvent(
+        new CustomEvent("agenda:auth", { detail: { user: null } }),
+      );
     }
   }
 
