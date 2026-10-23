@@ -27,12 +27,10 @@
         <a href="../index.html" class="logo">
           <i class="fa-solid fa-calendar-days"></i> AgendaCultural
         </a>
-        <nav class="nav-links">
+        <button class="nav-toggle" type="button" aria-label="Abrir menú" aria-expanded="false" aria-controls="menu-principal"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
+        <nav class="nav-links" id="menu-principal" aria-label="Navegación principal">
           <a href="index.html" class="active">San Rafael</a>
-          <a href="../mendoza/index.html">Mendoza</a>
-          <a href="../admin/index.html"
-            ><i class="fa-solid fa-lock"></i> Admin</a
-          >
+          <a href="../mendoza/index.html">Gran Mendoza</a>
         </nav>
       </div>
     </header>
@@ -358,5 +356,6 @@
 
     <script type="module" src="../js/auth.js"></script>
     <script type="module" src="../js/eventos.js"></script>
+    <script src="../js/nav.js" defer></script>
   </body>
 </html>
