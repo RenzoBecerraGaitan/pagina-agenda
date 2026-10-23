@@ -52,9 +52,117 @@ function escapeHtml(texto) {
 }
 
 /**
+ * Comprime una imagen a WebP (o JPEG si el navegador no soporta WebP).
+ * - Lado mayor <= 1280 px y calidad ~0.8.
+ * - Usa createImageBitmap y canvas.toBlob.
+ * - Si el Blob resultante pesa 2 MB o más, reintenta una vez con lado 1000 px
+ *   y calidad 0.7. Si sigue pesando 2 MB o más, lanza un Error claro.
+ * - No hay fallback silencioso al archivo original: si la compresión falla,
+ *   se lanza un Error y no se sube nada.
+ * @param {File} archivo
+ * @returns {Promise<Blob>}
+ */
+async function comprimirImagen(archivo) {
+  // Detectar soporte de WebP
+  let soportaWebP = false;
+  try {
+    await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = resolve;
+      img.onerror = reject;
+      img.src =
+        "data:image/webp;base64,UklGRiQAAABXRUJQVlA4TAgAAAAvAAAAQwAAAA==";
+    });
+    soportaWebP = true;
+  } catch (_) {
+    soportaWebP = false;
+  }
+
+  const mime = soportaWebP ? "image/webp" : "image/jpeg";
+
+  let bitmap;
+  try {
+    bitmap = await createImageBitmap(archivo);
+  } catch (_) {
+    throw new Error("No se pudo procesar la imagen, probá con otra");
+  }
+
+  const { width: ancho, height: alto } = bitmap;
+  const ladoMayor = Math.max(ancho, alto);
+
+  const toBlobPromise = (canvas, mimeType, calidad) =>
+    new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error("toBlob devolvió null"));
+        },
+        mimeType,
+        calidad,
+      );
+    });
+
+  const crearBlob = async (maxLado, calidad) => {
+    let w = ancho;
+    let h = alto;
+    if (ladoMayor > maxLado) {
+      const escala = maxLado / ladoMayor;
+      w = Math.round(ancho * escala);
+      h = Math.round(alto * escala);
+    }
+    const canvas = new OffscreenCanvas(w, h);
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    return toBlobPromise(canvas, mime, calidad);
+  };
+
+  let blob;
+  try {
+    blob = await crearBlob(1280, 0.8);
+  } catch (_) {
+    bitmap.close();
+    throw new Error("No se pudo procesar la imagen, probá con otra");
+  }
+
+  console.log(
+    "[comprimirImagen] tamaño original:",
+    archivo.size,
+    "bytes | comprimido:",
+    blob.size,
+    "bytes | tipo:",
+    blob.type,
+  );
+
+  if (blob.size >= 2 * 1024 * 1024) {
+    try {
+      blob = await crearBlob(1000, 0.7);
+    } catch (_) {
+      bitmap.close();
+      throw new Error("No se pudo procesar la imagen, probá con otra");
+    }
+    console.log(
+      "[comprimirImagen] reintento | comprimido:",
+      blob.size,
+      "bytes | tipo:",
+      blob.type,
+    );
+    if (blob.size >= 2 * 1024 * 1024) {
+      bitmap.close();
+      throw new Error(
+        "La imagen comprimida sigue superando los 2 MB. Probá con una imagen más pequeña o de menor resolución.",
+      );
+    }
+  }
+
+  bitmap.close();
+  return blob;
+}
+
+/**
  * 1. Función para subir evento:
  * - Exige que haya un usuario de Google autenticado (auth.currentUser).
- * - Valida que la imagen no supere los 2 MB y la sube a Firebase Storage.
+ * - Valida que la imagen no supere los 15 MB y la sube a Firebase Storage.
+ * - Si la imagen pesa 2 MB o más, la comprime (WebP/JPEG) antes de subirla.
  * - Valida que la localidad seleccionada pertenezca a la lista cerrada de la
  *   zona (ubicacion) ANTES de subir la imagen a Storage.
  * - Guarda los datos en la colección 'eventos' en Firestore y crea el registro
@@ -118,10 +226,27 @@ export async function subirEvento({
     );
   }
 
-  // Subir imagen a Storage
-  const nombreLimpio = imagenArchivo.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  // Subir imagen a Storage.
+  // Si el original pesa 2 MB o más, se comprime antes de subir; si pesa menos,
+  // se sube el original sin comprimir. Nunca se sube el original sin comprimir
+  // cuando supera los 2 MB.
+  const MAX_COMPRIMIR_BYTES = 2 * 1024 * 1024;
+  let archivoSubir = imagenArchivo;
+  let nombreLimpio = imagenArchivo.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+
+  if (imagenArchivo.size >= MAX_COMPRIMIR_BYTES) {
+    const blobComprimido = await comprimirImagen(imagenArchivo);
+    const ext = blobComprimido.type === "image/webp" ? ".webp" : ".jpg";
+    const nombreBase = nombreLimpio.replace(/\.[^/.]+$/, "");
+    nombreLimpio = `${nombreBase}${ext}`;
+    archivoSubir = blobComprimido;
+  }
+
   const storageRef = ref(storage, `eventos/${Date.now()}_${nombreLimpio}`);
-  const snapshot = await uploadBytes(storageRef, imagenArchivo);
+  const snapshot = await uploadBytes(storageRef, archivoSubir, {
+    contentType: archivoSubir.type,
+    cacheControl: "public,max-age=31536000,immutable",
+  });
   const imagenUrl = await getDownloadURL(snapshot.ref);
 
   // Generar ID del documento del evento y construir los datos (sin email/uid)
