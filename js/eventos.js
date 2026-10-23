@@ -109,7 +109,7 @@ export async function subirEvento({
     );
   }
 
-  const MAX_SIZE_MB = 2;
+  const MAX_SIZE_MB = 15;
   const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
   if (imagenArchivo.size > MAX_SIZE_BYTES) {
     const tamanoMB = (imagenArchivo.size / (1024 * 1024)).toFixed(2);
@@ -500,7 +500,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         return;
       }
 
-      const MAX_SIZE_MB = 2;
+      const MAX_SIZE_MB = 15;
       if (imagenArchivo.size > MAX_SIZE_MB * 1024 * 1024) {
         alert(
           `La imagen supera el límite de ${MAX_SIZE_MB} MB. Elige una imagen más liviana.`,
