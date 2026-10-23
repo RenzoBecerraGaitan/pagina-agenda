@@ -63,45 +63,32 @@ function escapeHtml(texto) {
  * @returns {Promise<Blob>}
  */
 async function comprimirImagen(archivo) {
-  // Detectar soporte de WebP
-  let soportaWebP = false;
-  try {
-    await new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = resolve;
-      img.onerror = reject;
-      img.src =
-        "data:image/webp;base64,UklGRiQAAABXRUJQVlA4TAgAAAAvAAAAQwAAAA==";
-    });
-    soportaWebP = true;
-  } catch (_) {
-    soportaWebP = false;
-  }
-
-  const mime = soportaWebP ? "image/webp" : "image/jpeg";
-
   let bitmap;
   try {
-    bitmap = await createImageBitmap(archivo);
-  } catch (_) {
+    bitmap = await createImageBitmap(archivo, {
+      imageOrientation: "from-image",
+    });
+  } catch (e) {
+    console.error("[comprimirImagen] createImageBitmap falló:", e);
     throw new Error("No se pudo procesar la imagen, probá con otra");
   }
 
-  const { width: ancho, height: alto } = bitmap;
+  const ancho = bitmap.width;
+  const alto = bitmap.height;
   const ladoMayor = Math.max(ancho, alto);
 
-  const toBlobPromise = (canvas, mimeType, calidad) =>
+  const aBlob = (canvas, tipo, calidad) =>
     new Promise((resolve, reject) => {
       canvas.toBlob(
-        (blob) => {
-          if (blob) resolve(blob);
-          else reject(new Error("toBlob devolvió null"));
-        },
-        mimeType,
+        (blob) =>
+          blob ? resolve(blob) : reject(new Error("toBlob devolvió null")),
+        tipo,
         calidad,
       );
     });
 
+  // Dibuja la imagen escalada y la exporta. Intenta WebP; si el navegador no
+  // lo soporta (devuelve otro tipo), usa JPEG con fondo blanco.
   const crearBlob = async (maxLado, calidad) => {
     let w = ancho;
     let h = alto;
@@ -110,22 +97,35 @@ async function comprimirImagen(archivo) {
       w = Math.round(ancho * escala);
       h = Math.round(alto * escala);
     }
-    const canvas = new OffscreenCanvas(w, h);
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
     const ctx = canvas.getContext("2d");
     ctx.drawImage(bitmap, 0, 0, w, h);
-    return toBlobPromise(canvas, mime, calidad);
+
+    let blob = await aBlob(canvas, "image/webp", calidad);
+    if (blob.type !== "image/webp") {
+      // El JPEG no tiene transparencia: se pinta un fondo blanco detrás.
+      ctx.globalCompositeOperation = "destination-over";
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, w, h);
+      ctx.globalCompositeOperation = "source-over";
+      blob = await aBlob(canvas, "image/jpeg", Math.min(calidad + 0.02, 0.9));
+    }
+    return blob;
   };
 
   let blob;
   try {
     blob = await crearBlob(1280, 0.8);
-  } catch (_) {
+  } catch (e) {
+    console.error("[comprimirImagen] error al comprimir:", e);
     bitmap.close();
     throw new Error("No se pudo procesar la imagen, probá con otra");
   }
 
   console.log(
-    "[comprimirImagen] tamaño original:",
+    "[comprimirImagen] original:",
     archivo.size,
     "bytes | comprimido:",
     blob.size,
@@ -136,7 +136,8 @@ async function comprimirImagen(archivo) {
   if (blob.size >= 2 * 1024 * 1024) {
     try {
       blob = await crearBlob(1000, 0.7);
-    } catch (_) {
+    } catch (e) {
+      console.error("[comprimirImagen] error en el reintento:", e);
       bitmap.close();
       throw new Error("No se pudo procesar la imagen, probá con otra");
     }
