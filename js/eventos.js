@@ -44,9 +44,12 @@ export const DESCRIPCION_CORTA = 140;
  * @returns {string}
  */
 export function construirUrlMaps(ev) {
-  const partes = [ev.lugar, ev.direccion, ev.localidad, "Mendoza, Argentina"].filter(
-    (p) => p && String(p).trim() !== "",
-  );
+  const partes = [
+    ev.lugar,
+    ev.direccion,
+    ev.localidad,
+    "Mendoza, Argentina",
+  ].filter((p) => p && String(p).trim() !== "");
   const consulta = partes.join(", ");
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(consulta)}`;
 }
@@ -401,6 +404,9 @@ export async function consultarEventosPublicos(ubicacion) {
 /**
  * Renderiza dinámicamente las tarjetas de eventos en el contenedor dado.
  */
+/**
+ * Renderiza dinámicamente las tarjetas de eventos en el contenedor dado.
+ */
 export function renderizarTarjetas(eventos, contenedor) {
   if (!contenedor) return;
 
@@ -427,7 +433,10 @@ export function renderizarTarjetas(eventos, contenedor) {
         ev.imagenUrl && ev.imagenUrl.startsWith("https://")
           ? ev.imagenUrl
           : IMAGEN_POR_DEFECTO;
-      const esLarga = descripcion.length > DESCRIPCION_CORTA;
+      const esLarga = descripcion.length > (window.DESCRIPCION_CORTA || 120);
+
+      const htmlLugar = obtenerHtmlLugar(ev);
+      const htmlContacto = obtenerHtmlContacto(ev);
 
       return `
         <article class="event-card ${esDestacado ? "featured" : ""}">
@@ -452,7 +461,7 @@ export function renderizarTarjetas(eventos, contenedor) {
             <div class="event-details">
               <div>
                 <i class="fa-solid fa-location-dot"></i>
-                <strong>Lugar:</strong> ${ev.lugar || ev.direccion ? `<a href="${construirUrlMaps(ev)}" target="_blank" rel="noopener noreferrer" aria-label="Ver en Google Maps">${escapeHtml(ev.lugar || "")} (${escapeHtml(ev.direccion || "")})</a>` : `${escapeHtml(ev.lugar || "")} (${escapeHtml(ev.direccion || ""))}`}
+                <strong>Lugar:</strong> ${htmlLugar}
               </div>
               ${
                 ev.localidad
@@ -465,7 +474,7 @@ export function renderizarTarjetas(eventos, contenedor) {
               }
               <div>
                 <i class="fa-solid fa-phone"></i>
-                <strong>Contacto:</strong> ${(function () { const num = normalizarTelefonoAR(ev.contacto); if (num) { const mensaje = `Hola, me comunico desde la Agenda Cultural por el evento "${escapeHtml(ev.nombre)}", quisiera más información.`; return `<a href="https://wa.me/${num}?text=${encodeURIComponent(mensaje)}" target="_blank" rel="noopener noreferrer" aria-label="Escribir por WhatsApp">${escapeHtml(ev.contacto || "")}</a>`; } return escapeHtml(ev.contacto || ""); })()}
+                <strong>Contacto:</strong> ${htmlContacto}
               </div>
             </div>
           </div>
@@ -473,6 +482,47 @@ export function renderizarTarjetas(eventos, contenedor) {
       `;
     })
     .join("");
+}
+
+/**
+ * Genera el HTML para el lugar y dirección del evento.
+ */
+function obtenerHtmlLugar(ev) {
+  const partes = [];
+  if (ev.lugar) partes.push(ev.lugar);
+  if (ev.direccion) partes.push(`(${ev.direccion})`);
+
+  const textoLugar = partes.join(" ");
+  if (!textoLugar) return "A confirmar";
+
+  const urlMaps =
+    typeof construirUrlMaps === "function" ? construirUrlMaps(ev) : null;
+
+  if (urlMaps) {
+    return `<a href="${urlMaps}" target="_blank" rel="noopener noreferrer" aria-label="Ver en Google Maps">${escapeHtml(textoLugar)}</a>`;
+  }
+  return escapeHtml(textoLugar);
+}
+
+/**
+ * Genera el HTML para el contacto con enlace a WhatsApp si aplica.
+ */
+function obtenerHtmlContacto(ev) {
+  if (!ev.contacto) return "No especificado";
+
+  const numLimpio =
+    typeof normalizarTelefonoAR === "function"
+      ? normalizarTelefonoAR(ev.contacto)
+      : null;
+
+  if (numLimpio) {
+    const nombreEvento = ev.nombre || "el evento";
+    const mensaje = `Hola, me comunico desde la Agenda Cultural por el evento "${nombreEvento}", quisiera más información.`;
+    const urlWa = `https://wa.me/${numLimpio}?text=${encodeURIComponent(mensaje)}`;
+    return `<a href="${urlWa}" target="_blank" rel="noopener noreferrer" aria-label="Escribir por WhatsApp">${escapeHtml(ev.contacto)}</a>`;
+  }
+
+  return escapeHtml(ev.contacto);
 }
 
 function formatearFecha(fechaStr) {
@@ -666,7 +716,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // Al abrir el modal, refrescar el min de fecha (por si pasó la medianoche)
-
 
   // Contador en vivo de la descripción
   const descTextarea = document.getElementById("event-desc");
