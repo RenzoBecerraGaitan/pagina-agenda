@@ -960,3 +960,164 @@ footer {
     padding: 2.5rem 2rem;
   }
 }
+
+
+/* ==========================================================================
+   Planes de publicación (modal "Cargar Nuevo Evento") - mobile-first
+   ========================================================================== */
+.planes-header {
+  margin-bottom: 1rem;
+}
+
+.planes-titulo {
+  font-size: 1.15rem;
+  margin-bottom: 0.4rem;
+  overflow-wrap: anywhere;
+}
+
+.planes-subtitulo {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.planes-lista {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.85rem;
+}
+
+.plan-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 1rem;
+}
+
+.plan-card.pago {
+  border: 2px solid var(--primary);
+  background: rgba(99, 102, 241, 0.05);
+}
+
+.plan-titulo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-weight: 700;
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.plan-precio {
+  flex-shrink: 0;
+  background: var(--primary);
+  color: #fff;
+  border-radius: 999px;
+  padding: 0.2rem 0.7rem;
+  font-size: 0.9rem;
+}
+
+.plan-subtitulo {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.plan-beneficios {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.9rem;
+  color: var(--text-main);
+}
+
+.plan-beneficios li {
+  margin-bottom: 0.3rem;
+  overflow-wrap: anywhere;
+}
+
+.plan-requisito {
+  background: rgba(245, 158, 11, 0.12);
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.btn-plan {
+  width: 100%;
+  min-height: 48px;
+  border-radius: var(--radius);
+  border: 2px solid var(--primary);
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: auto;
+  transition: var(--transition);
+}
+
+.btn-plan.gratuito {
+  background: var(--surface);
+  color: var(--primary);
+}
+
+.btn-plan.pago {
+  background: var(--primary);
+  color: #fff;
+}
+
+.btn-plan.whatsapp {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.btn-plan:hover:not(:disabled) {
+  filter: brightness(0.95);
+}
+
+.btn-plan:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Aviso del plan elegido arriba del formulario */
+.plan-aviso {
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  background: rgba(99, 102, 241, 0.08);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.9rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0.4rem 0;
+  color: var(--primary);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.plan-hint {
+  margin-top: 0.3rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+@media (min-width: 768px) {
+  .planes-lista {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

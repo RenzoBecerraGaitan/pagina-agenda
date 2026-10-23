@@ -148,6 +148,9 @@
 
           <!-- Step 2: Event Form (Hidden initially) -->
           <form id="event-form" style="display: none">
+            <!-- Plan elegido (lo completa eventos.js) -->
+            <div id="plan-actual-aviso" class="plan-aviso" style="display: none"></div>
+
             <div
               style="
                 background: rgba(34, 197, 94, 0.1);
@@ -221,6 +224,9 @@
                   class="form-control"
                   required
                 />
+                <p id="fecha-hint-gratuito" class="plan-hint" style="display: none">
+                  Plan gratuito: la fecha debe ser al menos 2 días después de hoy.
+                </p>
               </div>
               <div class="form-group">
                 <label for="event-time">Hora</label>

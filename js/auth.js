@@ -27,8 +27,9 @@ googleProvider.setCustomParameters({
  */
 export async function loginWithGoogle() {
   try {
-    // Asegurar persistencia local antes de autenticar
-    await setPersistence(auth, browserLocalPersistence);
+    // La persistencia local ya se configura al cargar este módulo. No se espera
+    // nada antes de abrir el popup: algunos navegadores de celular lo bloquean
+    // si no se abre directamente dentro del toque del usuario.
     const result = await signInWithPopup(auth, googleProvider);
     console.log("Inicio de sesión exitoso:", result.user);
     return result.user;

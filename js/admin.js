@@ -2,6 +2,7 @@
 import { db, storage, auth, firebaseConfig } from "./firebase-config.js";
 import { googleProvider } from "./auth.js";
 import { fechaLocalHoy } from "./eventos.js";
+import { normalizarTelefonoAR } from "./utils.js";
 import {
   signInWithPopup,
   signOut,
@@ -851,13 +852,16 @@ async function actualizarVistaAdminParaUsuario(user) {
 async function cargarConfigWhatsAppAdmin() {
   const inputSR = document.getElementById("wa-sanrafael-admin");
   const inputMdz = document.getElementById("wa-mendoza-admin");
-  if (!inputSR && !inputMdz) return;
+  const inputCons = document.getElementById("wa-consultas-admin");
+  if (!inputSR && !inputMdz && !inputCons) return;
   try {
     const snap = await getDoc(doc(db, "config", "whatsapp"));
     if (snap.exists()) {
       const data = snap.data();
       if (inputSR && data.sanrafael) inputSR.value = data.sanrafael;
       if (inputMdz && data.mendoza) inputMdz.value = data.mendoza;
+      if (inputCons && data.numeroConsultas)
+        inputCons.value = data.numeroConsultas;
     }
   } catch (err) {
     console.error("[admin] Error al leer config de WhatsApp:", err);
@@ -874,6 +878,19 @@ async function guardarConfigWhatsApp() {
     const inputMdz = document.getElementById("wa-mendoza-admin");
     const sr = (inputSR ? inputSR.value : "").trim();
     const mdz = (inputMdz ? inputMdz.value : "").trim();
+    // Número de WhatsApp para consultas y pagos de los planes (se guarda normalizado)
+    const inputCons = document.getElementById("wa-consultas-admin");
+    const consultasCrudo = (inputCons ? inputCons.value : "").trim();
+    let numeroConsultas = "";
+    if (consultasCrudo) {
+      numeroConsultas = normalizarTelefonoAR(consultasCrudo);
+      if (!numeroConsultas) {
+        alert(
+          "El número de consultas no es válido. Usá un celular argentino, por ejemplo 5492610000000.",
+        );
+        return;
+      }
+    }
     const WA_PATTERN = /^https:\/\/(chat\.whatsapp\.com\/|wa\.me\/)/;
     if (sr && !WA_PATTERN.test(sr)) {
       alert("El link de San Rafael debe empezar con https://chat.whatsapp.com/ o https://wa.me/");
@@ -888,12 +905,13 @@ async function guardarConfigWhatsApp() {
       {
         sanrafael: sr || "",
         mendoza: mdz || "",
+        numeroConsultas,
         actualizadoPor: auth.currentUser.email,
         fecha: serverTimestamp(),
       },
       { merge: true },
     );
-    alert("Links de WhatsApp guardados correctamente.");
+    alert("Configuración de WhatsApp guardada correctamente.");
     await cargarConfigWhatsAppAdmin();
   } catch (error) {
     alert(describirErrorAdmin(error, "guardar los links de WhatsApp"));

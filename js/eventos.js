@@ -285,7 +285,7 @@ async function comprimirImagen(archivo) {
  *   commit). El documento del evento NO guarda email ni uid.
  * - Campos: nombre, descripcion, fecha, hora, lugar, direccion, localidad,
  *   contacto, imagenUrl, ubicacion, estado ('pendiente'), destacado (false),
- *   fechaCreacion.
+ *   plan ('gratuito' | 'destacado' | 'premium'), fechaCreacion.
  */
 export async function subirEvento({
   nombre,
@@ -298,6 +298,7 @@ export async function subirEvento({
   contacto,
   ubicacion,
   imagenArchivo,
+  plan,
 }) {
   // Exigir usuario autenticado
   const user = auth.currentUser;
@@ -309,6 +310,13 @@ export async function subirEvento({
 
   if (!imagenArchivo) {
     throw new Error("Debe seleccionar una imagen para el evento.");
+  }
+
+  // Validación del plan elegido (los planes personalizados y sponsors no pasan
+  // por este formulario).
+  const PLANES_CON_FORMULARIO = ["gratuito", "destacado", "premium"];
+  if (!PLANES_CON_FORMULARIO.includes(plan)) {
+    throw new Error("Elegí un plan de publicación antes de enviar el evento.");
   }
 
   // Validación de la localidad contra la lista cerrada de la zona.
@@ -329,6 +337,13 @@ export async function subirEvento({
   const hoyStr = fechaLocalHoy();
   if (fecha && fecha < hoyStr) {
     throw new Error("La fecha no puede ser anterior a hoy.");
+  }
+
+  // Plan gratuito: el evento debe cargarse con al menos 2 días de anticipación
+  if (plan === "gratuito" && fecha && fecha < fechaLocalMasDias(2)) {
+    throw new Error(
+      "Con el Plan Gratuito el evento debe cargarse con al menos 2 días de anticipación.",
+    );
   }
 
   // Validación de hora: minutos 00, 15, 30 o 45
@@ -391,6 +406,7 @@ export async function subirEvento({
     ubicacion, // 'sanrafael' o 'mendoza'
     estado: "pendiente",
     destacado: false,
+    plan, // 'gratuito' | 'destacado' | 'premium' (el admin destaca tras el pago)
     fechaCreacion: serverTimestamp(),
   };
 
@@ -408,68 +424,89 @@ export async function subirEvento({
   return { id: eventoRef.id, ...nuevoEvento };
 }
 
-/**
- * 2. Función para consultar eventos públicos:
- * - Trae eventos con estado == 'aprobado', ubicacion coincidente y fecha >= hoy.
- * - Ordena poniendo primero los que tengan destacado == true.
- */
+// ---------------------------------------------------------------------------
+// Flujo del modal de carga: 1) login con Google -> 2) planes -> 3) formulario
+// -> 4) éxito (solo planes pagos)
+// ---------------------------------------------------------------------------
+
 // Estado del flujo de carga dentro de la sesión actual del modal.
 let planElegido = null; // objeto de PLANES o null
 let usuarioLogueado = null; // usuario de Firebase o null
-let numeroConsultasCache = null; // numero de WhatsApp para consultas/pagos
-let cacheConfigWhatsapp = null; // cache en memoria de config/whatsapp
+let pasoActual = "auth"; // "auth" | "planes" | "form" | "exito"
+let numeroConsultasCache = null; // número de WhatsApp (549 + 10 dígitos) o null
+
+function modalCargaActivo() {
+  const modal = document.getElementById("upload-modal");
+  return Boolean(modal && modal.classList.contains("active"));
+}
 
 /**
- * Listener del evento agenda:auth despachado desde auth.js.
- * Actualiza el estado del usuario y navega al paso correspondiente.
- * @param {CustomEvent} e - Evento con detail.user
+ * Listener del evento "agenda:auth" que despacha auth.js cada vez que cambia
+ * la sesión de Google. Si el modal está abierto:
+ * - con sesión iniciada pasa del login a la pantalla de planes;
+ * - al cerrar sesión vuelve al login y olvida el plan elegido.
  */
 export function initAuthListener() {
   document.addEventListener("agenda:auth", (e) => {
-    const user = e.detail.user;
-    usuarioLogueado = user;
-
+    const user = e.detail ? e.detail.user : null;
+    usuarioLogueado = user || null;
+    if (!modalCargaActivo()) return;
     if (user) {
-      // Usuario logueado: si ya hay plan elegido, ir al formulario
-      if (planElegido) {
-        mostrarPaso("form");
-      }
-      // Actualizar UI: ocultar paso auth si estamos en planes
-      const plansStep = document.getElementById("plans-step");
-      const authStep = document.getElementById("auth-step");
-      if (plansStep && authStep) {
-        authStep.style.display = "none";
-      }
+      if (pasoActual === "auth") mostrarPaso("planes");
     } else {
-      // Usuario deslogueado: volver al paso de planes
-      if (planElegido) {
-        mostrarPaso("planes");
-      }
+      planElegido = null;
+      mostrarPaso("auth");
     }
   });
 }
 
 /**
+ * Abre el modal de carga. Primero el login; si ya hay sesión iniciada, va
+ * directo a la pantalla de planes.
+ */
+export function abrirModalCarga() {
+  const modal = document.getElementById("upload-modal");
+  if (!modal) return;
+  planElegido = null;
+  const hayUsuario = usuarioLogueado || auth.currentUser;
+  modal.classList.add("active");
+  mostrarPaso(hayUsuario ? "planes" : "auth");
+  // Precarga el número de WhatsApp que usan los botones de los planes.
+  cargarNumeroConsultas();
+}
+
+/** Cierra el modal de carga y olvida el plan elegido. */
+export function cerrarModalCarga() {
+  const modal = document.getElementById("upload-modal");
+  if (modal) modal.classList.remove("active");
+  planElegido = null;
+}
 
 /**
- * Lee config/whatsapp de Firestore (con cache simple en memoria) para obtener
- * el numero de WhatsApp de consultas y pagos (numeroConsultas).
+ * Lee config/whatsapp de Firestore y guarda en memoria el número de consultas y
+ * pagos (campo numeroConsultas). Si falta o falla la lectura, los botones que
+ * dependen de WhatsApp quedan deshabilitados.
  * @returns {Promise<string|null>}
  */
-async function obtenerNumeroConsultas() {
-  if (cacheConfigWhatsapp) {
-    return cacheConfigWhatsapp.numeroConsultas || null;
-  }
-  try {
-    const snap = await getDoc(doc(db, "config", "whatsapp"));
-    if (snap.exists()) {
-      cacheConfigWhatsapp = snap.data();
-      return cacheConfigWhatsapp.numeroConsultas || null;
+async function cargarNumeroConsultas() {
+  if (!numeroConsultasCache) {
+    try {
+      const snap = await getDoc(doc(db, "config", "whatsapp"));
+      if (snap.exists()) {
+        numeroConsultasCache =
+          normalizarTelefonoAR(snap.data().numeroConsultas) || null;
+      }
+    } catch (error) {
+      console.error("[eventos] Error al leer config de WhatsApp:", error);
     }
-  } catch (error) {
-    console.error("[eventos] Error al leer config de WhatsApp:", error);
   }
-  return null;
+  aplicarDisponibilidadWhatsapp();
+  return numeroConsultasCache;
+}
+
+// Arma el enlace de WhatsApp al número de consultas con el mensaje codificado.
+function construirUrlWhatsApp(mensaje) {
+  return `https://wa.me/${numeroConsultasCache}?text=${encodeURIComponent(mensaje)}`;
 }
 
 // Genera el HTML de una tarjeta de plan.
@@ -477,6 +514,8 @@ async function obtenerNumeroConsultas() {
 // @returns {string}
 function generarPlanCard(plan) {
   const esPago = plan.tipo === "pago";
+  // El título de PLANES incluye el precio; en la tarjeta se muestra aparte.
+  const tituloCard = plan.titulo.split(" — ")[0];
   const precioHTML =
     plan.precio !== null
       ? `<span class="plan-precio">$${plan.precio.toLocaleString("es-AR")}</span>`
@@ -498,16 +537,11 @@ function generarPlanCard(plan) {
 
   return `
     <article class="plan-card${esPago ? " pago" : ""}">
-      <div class="plan-titulo">${escapeHtml(plan.titulo)}${precioHTML}</div>
+      <div class="plan-titulo"><span>${escapeHtml(tituloCard)}</span>${precioHTML}</div>
       ${subtituloHTML}
       ${beneficiosHTML.length > 0 ? `<ul class="plan-beneficios">${beneficiosHTML}</ul>` : ""}
       ${requisitoHTML}
-      <button
-        type="button"
-        id="btn-plan-${plan.id}"
-        class="${claseBtn}"
-        style="min-height: 48px;"
-      >
+      <button type="button" id="btn-plan-${plan.id}" class="${claseBtn}">
         ${escapeHtml(plan.btnTexto)}
       </button>
     </article>
@@ -536,119 +570,129 @@ function renderizarPlanesStep() {
   aplicarDisponibilidadWhatsapp();
 }
 
-// Selecciona un plan gratuito/pago o abre WhatsApp directo para planes tipo whatsapp.
+// Gratuito / Destacado / Premium: pasa al formulario. Personalizados y
+// Sponsors: abre WhatsApp directo con su mensaje.
 // @param {object} plan
 function seleccionarPlan(plan) {
-  planElegido = plan;
-
   if (plan.tipo === "whatsapp") {
     abrirWhatsAppDirecto(plan.waMensaje);
     return;
   }
-
-  // Gratuito, Destacado o Premium: si hay sesion se va al form, si no, al login.
-  if (usuarioLogueado) {
-    mostrarPaso("form");
-  } else {
+  // El login se pide antes de los planes; por las dudas, se revalida.
+  if (!(usuarioLogueado || auth.currentUser)) {
     mostrarPaso("auth");
+    return;
   }
+  planElegido = plan;
+  mostrarPaso("form");
 }
 
 // Abre WhatsApp en pestaña nueva para planes personalizados / sponsors.
 // @param {string} mensaje
 function abrirWhatsAppDirecto(mensaje) {
-  if (!numeroConsultasCache) return;
-  const url = `https://wa.me/${numeroConsultasCache}?text=${encodeURIComponent(mensaje)}`;
-  window.open(url, "_blank", "noopener");
+  if (!numeroConsultasCache) {
+    alert("El contacto no está disponible por el momento. Probá más tarde.");
+    return;
+  }
+  window.open(construirUrlWhatsApp(mensaje), "_blank", "noopener");
 }
 
-// Habilita/deshabilita los botones de planes tipo WhatsApp segun si hay numero
-// de contacto configurado. Cuando no hay, se deshabilitan con un texto claro.
+// Habilita/deshabilita los botones que dependen del número de WhatsApp
+// (planes pagos, personalizados y sponsors).
 function aplicarDisponibilidadWhatsapp() {
-  const disponible = !!numeroConsultasCache;
-  PLANES.filter((p) => p.tipo === "whatsapp").forEach((plan) => {
+  const disponible = Boolean(numeroConsultasCache);
+  PLANES.filter((p) => p.tipo !== "gratuito").forEach((plan) => {
     const btn = document.getElementById(`btn-plan-${plan.id}`);
     if (!btn) return;
-    if (!disponible) {
-      btn.disabled = true;
-      btn.textContent = "Contacto no disponible por el momento";
-    } else {
-      btn.disabled = false;
-      btn.textContent = plan.btnTexto;
-    }
+    btn.disabled = !disponible;
+    btn.textContent = disponible
+      ? plan.btnTexto
+      : "Contacto no disponible por el momento";
   });
 }
 
-// Muestra un solo paso del modal: "planes" | "auth" | "form" | "exito".
-// @param {"planes"|"auth"|"form"|"exito"} paso
+// Muestra un solo paso del modal: "auth" | "planes" | "form" | "exito".
+// @param {"auth"|"planes"|"form"|"exito"} paso
 function mostrarPaso(paso) {
-  const plansStep = document.getElementById("plans-step");
-  const authStep = document.getElementById("auth-step");
-  const eventForm = document.getElementById("event-form");
-  const exitoStep = document.getElementById("exito-step");
-  const aviso = document.getElementById("plan-actual-aviso");
-
-  [plansStep, authStep, eventForm, exitoStep].forEach((el) => {
+  pasoActual = paso;
+  const pasos = {
+    auth: document.getElementById("auth-step"),
+    planes: document.getElementById("plans-step"),
+    form: document.getElementById("event-form"),
+    exito: document.getElementById("exito-step"),
+  };
+  Object.values(pasos).forEach((el) => {
     if (el) el.style.display = "none";
   });
-  if (aviso) aviso.style.display = "none";
+  if (pasos[paso]) pasos[paso].style.display = "block";
 
-  switch (paso) {
-    case "planes":
-      if (plansStep) plansStep.style.display = "block";
-      break;
-    case "auth":
-      if (authStep) authStep.style.display = "block";
-      break;
-    case "form":
-      if (eventForm) eventForm.style.display = "block";
-      if (aviso && planElegido) {
-        aviso.style.display = "flex";
-        aviso.innerHTML = `Plan elegido: <strong>${escapeHtml(
-          planElegido.titulo,
-        )}</strong> <a href="#" id="btn-cambiar-plan" style="color: var(--primary); text-decoration: underline; cursor: pointer; margin-left: 0.5rem;">Cambiar plan</a>`;
-        const btnCambiar = document.getElementById("btn-cambiar-plan");
-        if (btnCambiar) {
-          btnCambiar.addEventListener("click", (e) => {
-            e.preventDefault();
-            mostrarPaso("planes");
-          });
-        }
-      }
-      actualizarFechaMinPorPlan();
-      break;
-    case "exito":
-      if (exitoStep) exitoStep.style.display = "block";
-      break;
+  if (paso === "form") {
+    actualizarAvisoPlan();
+    actualizarFechaMinPorPlan();
+    actualizarBotonEnvio();
+  }
+
+  // El modal vuelve arriba al cambiar de paso
+  const contenedor = document.querySelector("#upload-modal .modal-container");
+  if (contenedor) contenedor.scrollTop = 0;
+}
+
+// Línea "Plan elegido: ... Cambiar plan" arriba del formulario.
+function actualizarAvisoPlan() {
+  const aviso = document.getElementById("plan-actual-aviso");
+  if (!aviso) return;
+  if (!planElegido) {
+    aviso.style.display = "none";
+    return;
+  }
+  aviso.style.display = "flex";
+  aviso.innerHTML = `<span>Plan elegido: <strong>${escapeHtml(planElegido.titulo)}</strong></span><button type="button" id="btn-cambiar-plan" class="link-btn">Cambiar plan</button>`;
+  const btnCambiar = document.getElementById("btn-cambiar-plan");
+  if (btnCambiar) {
+    // No se borra el formulario: al volver a elegir plan se conserva lo escrito
+    btnCambiar.addEventListener("click", () => mostrarPaso("planes"));
   }
 }
 
-// Actualiza el min del campo fecha y el aviso segun el plan elegido.
-// Si la fecha ya elegida deja de ser valida, se limpia y se avisa.
+// Texto del botón de envío según el plan.
+function actualizarBotonEnvio() {
+  const form = document.getElementById("event-form");
+  const btn = form ? form.querySelector('button[type="submit"]') : null;
+  if (!btn || !planElegido) return;
+  if (!btn.dataset.textoOriginal) btn.dataset.textoOriginal = btn.innerHTML;
+  btn.innerHTML =
+    planElegido.tipo === "pago"
+      ? '<i class="fa-brands fa-whatsapp"></i> Enviar y consultar por WhatsApp'
+      : btn.dataset.textoOriginal;
+}
+
+// Actualiza el min del campo fecha y el aviso según el plan elegido.
+// Si la fecha ya elegida deja de ser válida, se limpia y se avisa.
 function actualizarFechaMinPorPlan() {
-  if (!dateInput) return;
+  const campoFecha = document.getElementById("event-date");
+  if (!campoFecha) return;
   const hint = document.getElementById("fecha-hint-gratuito");
-  const esGratuito = planElegido && planElegido.id === "gratuito";
+  const esGratuito = Boolean(planElegido && planElegido.id === "gratuito");
   const minStr = esGratuito ? fechaLocalMasDias(2) : fechaLocalHoy();
 
-  dateInput.min = minStr;
+  campoFecha.min = minStr;
   if (hint) hint.style.display = esGratuito ? "block" : "none";
 
-  if (dateInput.value && dateInput.value < minStr) {
-    dateInput.value = "";
+  if (campoFecha.value && campoFecha.value < minStr) {
+    campoFecha.value = "";
     alert(
-      "La fecha seleccionada no es valida para el plan elegido y se ha limpiado.",
+      "La fecha elegida no es válida para el plan seleccionado. Elegí una nueva fecha.",
     );
   }
 }
 
-// Renderiza el paso "exito" para planes pagos.
+// Renderiza el paso "éxito" de los planes pagos.
 // @param {string|null} urlWhatsApp
 function renderizarExito(urlWhatsApp) {
   const exito = document.getElementById("exito-step");
   if (!exito) return;
   const botonWa = urlWhatsApp
-    ? `<a href="${urlWhatsApp}" target="_blank" rel="noopener noreferrer" id="btn-exito-whatsapp" class="btn btn-primary" style="width: 100%; justify-content: center; margin-bottom: 0.75rem;">Continuar por WhatsApp</a>`
+    ? `<a href="${escapeHtml(urlWhatsApp)}" target="_blank" rel="noopener noreferrer" id="btn-exito-whatsapp" class="btn btn-primary" style="width: 100%; justify-content: center; margin-bottom: 0.75rem;">Continuar por WhatsApp</a>`
     : `<button type="button" id="btn-exito-whatsapp" class="btn btn-primary" style="width: 100%; justify-content: center; margin-bottom: 0.75rem;" disabled>Contacto no disponible por el momento</button>`;
   exito.innerHTML = `
     <div style="text-align: center; padding: 1rem 0;">
@@ -662,13 +706,15 @@ function renderizarExito(urlWhatsApp) {
   `;
   const btnCerrar = document.getElementById("btn-exito-cerrar");
   if (btnCerrar) {
-    btnCerrar.addEventListener("click", () => {
-      if (modalOverlay) modalOverlay.classList.remove("active");
-      mostrarPaso("planes");
-    });
+    btnCerrar.addEventListener("click", cerrarModalCarga);
   }
 }
 
+/**
+ * 2. Función para consultar eventos públicos:
+ * - Trae eventos con estado == 'aprobado', ubicacion coincidente y fecha >= hoy.
+ * - Ordena poniendo primero los que tengan destacado == true.
+ */
 export async function consultarEventosPublicos(ubicacion) {
   const hoy = fechaLocalHoy();
 
@@ -975,7 +1021,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
-  await cargarEventos();
+  // Flujo del modal (login -> planes -> formulario). Se prepara ANTES de cargar
+  // los eventos, para que "Cargar evento" responda aunque la red tarde.
+  renderizarPlanesStep();
+  initAuthListener();
+
+  // Los eventos se cargan en segundo plano, sin bloquear el resto de la página.
+  cargarEventos();
 
   // Listener delegado para "Ver más" / "Ver menos" de descripciones largas
 
@@ -998,17 +1050,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   const btnOpenUpload = document.getElementById("btn-open-upload");
   const modalClose = document.querySelector(".modal-close");
 
+  // Orden del flujo: 1) login con Google, 2) elegir plan, 3) formulario.
   if (btnOpenUpload && modalOverlay) {
     btnOpenUpload.addEventListener("click", () => {
       establecerFechaMin();
-      modalOverlay.classList.add("active");
+      abrirModalCarga();
     });
   }
 
   if (modalClose && modalOverlay) {
-    modalClose.addEventListener("click", () => {
-      modalOverlay.classList.remove("active");
-    });
+    modalClose.addEventListener("click", cerrarModalCarga);
   }
 
   // Selector nativo de fecha al hacer clic en el campo (incluido ícono)
@@ -1071,6 +1122,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         return;
       }
 
+      // Debe haber un plan elegido (se elige antes de ver el formulario)
+      if (!planElegido) {
+        alert("Elegí un plan de publicación para continuar.");
+        mostrarPaso("planes");
+        return;
+      }
+
       const imageInput = document.getElementById("event-image");
       const imagenArchivo = imageInput ? imageInput.files[0] : null;
 
@@ -1102,12 +1160,21 @@ document.addEventListener("DOMContentLoaded", async () => {
       const btnSubmit = eventForm.querySelector('button[type="submit"]');
       const originalBtnText = btnSubmit ? btnSubmit.innerHTML : "Enviar Evento";
 
-      // Validación de fecha: no anterior a hoy
+      // Validación de fecha: no anterior a hoy y, en el plan gratuito, al menos
+      // 2 días de anticipación
       const hoyStr = fechaLocalHoy();
       if (fecha && fecha < hoyStr) {
-        btnSubmit.disabled = false;
-        btnSubmit.innerHTML = originalBtnText;
         alert("La fecha no puede ser anterior a hoy.");
+        return;
+      }
+      if (
+        planElegido.id === "gratuito" &&
+        fecha &&
+        fecha < fechaLocalMasDias(2)
+      ) {
+        alert(
+          "Con el Plan Gratuito el evento debe cargarse con al menos 2 días de anticipación.",
+        );
         return;
       }
 
@@ -1118,6 +1185,30 @@ document.addEventListener("DOMContentLoaded", async () => {
         btnSubmit.innerHTML = originalBtnText;
         alert("Elegí la hora y los minutos del evento.");
         return;
+      }
+
+      // Planes pagos: al terminar de guardar se abre WhatsApp. Se abre una pestaña
+      // en blanco AHORA (dentro del toque del usuario) porque los celulares
+      // bloquean las ventanas que se abren después de esperar el guardado.
+      const planEnvio = planElegido;
+      const esPago = planEnvio.tipo === "pago";
+      let ventanaWa = null;
+      if (esPago) {
+        if (!numeroConsultasCache) {
+          alert(
+            "El contacto para coordinar el pago no está disponible por el momento. Probá más tarde.",
+          );
+          return;
+        }
+        try {
+          ventanaWa = window.open("", "_blank");
+          if (ventanaWa) {
+            ventanaWa.document.title = "Guardando tu evento...";
+            ventanaWa.document.body.textContent = "Guardando tu evento...";
+          }
+        } catch (_) {
+          ventanaWa = null;
+        }
       }
 
       try {
@@ -1137,19 +1228,35 @@ document.addEventListener("DOMContentLoaded", async () => {
           contacto,
           ubicacion: ubicacionActual,
           imagenArchivo,
+          plan: planEnvio.id,
         });
 
-        alert(
-          "¡Evento enviado con éxito! Quedará pendiente de aprobación por el moderador.",
-        );
         eventForm.reset();
         const campoDesc = document.getElementById("event-desc");
         if (campoDesc) campoDesc.dispatchEvent(new Event("input"));
 
-        if (modalOverlay) {
-          modalOverlay.classList.remove("active");
+        if (esPago) {
+          // Plan Destacado / Premium: continuar por WhatsApp para coordinar el pago
+          const mensaje = `Hola! Quiero contratar el ${planEnvio.nombre} para el evento '${nombre}' y quisiera más información para proceder con el pago.`;
+          const urlWa = construirUrlWhatsApp(mensaje);
+          if (ventanaWa && !ventanaWa.closed) {
+            try {
+              ventanaWa.opener = null;
+              ventanaWa.location.href = urlWa;
+            } catch (_) {
+              // Si falla, queda el botón "Continuar por WhatsApp" del paso de éxito
+            }
+          }
+          renderizarExito(urlWa);
+          mostrarPaso("exito");
+        } else {
+          alert(
+            "¡Evento enviado con éxito! Quedará pendiente de aprobación por el moderador.",
+          );
+          cerrarModalCarga();
         }
       } catch (error) {
+        if (ventanaWa && !ventanaWa.closed) ventanaWa.close();
         console.error("Error al subir el evento:", error);
         if (error && error.code === "permission-denied") {
           alert("No tenés permiso para publicar eventos con esta cuenta.");
