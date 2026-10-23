@@ -589,6 +589,16 @@ header {
   width: 16px;
 }
 
+.event-details a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.event-details a:hover {
+  color: var(--primary);
+}
+
 .no-events {
   grid-column: 1 / -1;
   text-align: center;

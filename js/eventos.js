@@ -37,6 +37,53 @@ export const MAX_DESCRIPCION = 300;
 export const DESCRIPCION_CORTA = 140;
 
 /**
+ * Arma la URL de Google Maps para un evento.
+ * Une con ", " los datos no vacíos de [lugar, direccion, localidad, "Mendoza, Argentina"]
+ * y devuelve el enlace de búsqueda.
+ * @param {object} ev - Objeto del evento con campos lugar, direccion, localidad.
+ * @returns {string}
+ */
+export function construirUrlMaps(ev) {
+  const partes = [ev.lugar, ev.direccion, ev.localidad, "Mendoza, Argentina"].filter(
+    (p) => p && String(p).trim() !== "",
+  );
+  const consulta = partes.join(", ");
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(consulta)}`;
+}
+
+/**
+ * Normaliza un teléfono de contacto argentino a formato 549 + 10 dígitos.
+ * Devuelve el número limpio o null si no es un móvil válido.
+ * @param {string|null|undefined} contacto
+ * @returns {string|null}
+ */
+export function normalizarTelefonoAR(contacto) {
+  if (!contacto) return null;
+  let digitos = String(contacto).replace(/\D/g, "");
+  if (digitos.startsWith("00")) {
+    digitos = digitos.slice(2);
+  }
+  if (digitos.startsWith("549") && digitos.length === 13) {
+    return digitos;
+  }
+  if (digitos.startsWith("54") && digitos.length === 12) {
+    return "549" + digitos.slice(2);
+  }
+  if (!digitos.startsWith("54")) {
+    if (digitos.startsWith("0")) {
+      digitos = digitos.slice(1);
+    }
+    if (digitos.length === 10) {
+      return "549" + digitos;
+    }
+  }
+  if (/^549\d{10}$/.test(digitos)) {
+    return digitos;
+  }
+  return null;
+}
+
+/**
  * Escapa HTML para prevenir XSS al insertar texto de usuario con innerHTML.
  * @param {string|null|undefined} texto
  * @returns {string}
@@ -405,7 +452,7 @@ export function renderizarTarjetas(eventos, contenedor) {
             <div class="event-details">
               <div>
                 <i class="fa-solid fa-location-dot"></i>
-                <strong>Lugar:</strong> ${escapeHtml(ev.lugar || "")} (${escapeHtml(ev.direccion || "")})
+                <strong>Lugar:</strong> ${ev.lugar || ev.direccion ? `<a href="${construirUrlMaps(ev)}" target="_blank" rel="noopener noreferrer" aria-label="Ver en Google Maps">${escapeHtml(ev.lugar || "")} (${escapeHtml(ev.direccion || "")})</a>` : `${escapeHtml(ev.lugar || "")} (${escapeHtml(ev.direccion || ""))}`}
               </div>
               ${
                 ev.localidad
@@ -418,7 +465,7 @@ export function renderizarTarjetas(eventos, contenedor) {
               }
               <div>
                 <i class="fa-solid fa-phone"></i>
-                <strong>Contacto:</strong> ${escapeHtml(ev.contacto || "")}
+                <strong>Contacto:</strong> ${(function () { const num = normalizarTelefonoAR(ev.contacto); if (num) { const mensaje = `Hola, me comunico desde la Agenda Cultural por el evento "${escapeHtml(ev.nombre)}", quisiera más información.`; return `<a href="https://wa.me/${num}?text=${encodeURIComponent(mensaje)}" target="_blank" rel="noopener noreferrer" aria-label="Escribir por WhatsApp">${escapeHtml(ev.contacto || "")}</a>`; } return escapeHtml(ev.contacto || ""); })()}
               </div>
             </div>
           </div>
