@@ -52,7 +52,7 @@ export const PLANES = [
     precio: null,
     beneficios: [
       "Publicación en la página web.",
-      "Difusión en los grupos de WhatsApp correspondientes a la zona del evento.",
+      "Difusión el mismo día del evento en los grupos de WhatsApp de tu zona.",
     ],
     requisito:
       "⚠️ Requisito: Los eventos deben cargarse con un mínimo de 2 días de anticipación a su realización para garantizar su procesamiento.",
@@ -65,7 +65,7 @@ export const PLANES = [
     titulo: "⭐ Plan Destacado — $10.000",
     precio: 10000,
     beneficios: [
-      "Publicación prioritaria en los grupos de WhatsApp de la zona del evento.",
+      "Publicación prioritaria en los grupos de WhatsApp de tu zona.",
       "Ubicación prioritaria en la web como Evento Destacado (ordenados por fecha más próxima).",
       "Difusión gratuita adicional el día del evento.",
     ],
@@ -78,7 +78,7 @@ export const PLANES = [
     titulo: "🚀 Plan Premium + Instagram — $15.000",
     precio: 15000,
     beneficios: [
-      "Publicación prioritaria en grupos de WhatsApp e Instagram.",
+      "Publicación prioritaria en grupos de WhatsApp e Instagram de tu zona.",
       "Ubicación prioritaria en la web como Evento Destacado (ordenados por fecha más próxima).",
       "Difusión gratuita adicional el día del evento.",
     ],
@@ -124,7 +124,6 @@ export function fechaLocalMasDias(dias) {
   const día = String(ahora.getDate()).padStart(2, "0");
   return `${año}-${mes}-${día}`;
 }
-
 
 /**
  * Arma la URL de Google Maps para un evento.
@@ -1272,4 +1271,3 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 });
-

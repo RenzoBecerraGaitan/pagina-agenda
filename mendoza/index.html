@@ -27,8 +27,20 @@
         <a href="../index.html" class="logo">
           <i class="fa-solid fa-calendar-days"></i> AgendaCultural
         </a>
-        <button class="nav-toggle" type="button" aria-label="Abrir menú" aria-expanded="false" aria-controls="menu-principal"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
-        <nav class="nav-links" id="menu-principal" aria-label="Navegación principal">
+        <button
+          class="nav-toggle"
+          type="button"
+          aria-label="Abrir menú"
+          aria-expanded="false"
+          aria-controls="menu-principal"
+        >
+          <i class="fa-solid fa-bars" aria-hidden="true"></i>
+        </button>
+        <nav
+          class="nav-links"
+          id="menu-principal"
+          aria-label="Navegación principal"
+        >
           <a href="../sanrafael/index.html">San Rafael</a>
           <a href="index.html" class="active">Gran Mendoza</a>
         </nav>
@@ -149,7 +161,11 @@
           <!-- Step 2: Event Form (Hidden initially) -->
           <form id="event-form" style="display: none">
             <!-- Plan elegido (lo completa eventos.js) -->
-            <div id="plan-actual-aviso" class="plan-aviso" style="display: none"></div>
+            <div
+              id="plan-actual-aviso"
+              class="plan-aviso"
+              style="display: none"
+            ></div>
 
             <div
               style="
@@ -224,19 +240,24 @@
                   class="form-control"
                   required
                 />
-                <p id="fecha-hint-gratuito" class="plan-hint" style="display: none">
-                  Plan gratuito: la fecha debe ser al menos 2 días después de hoy.
+                <p
+                  id="fecha-hint-gratuito"
+                  class="plan-hint"
+                  style="display: none"
+                >
+                  Plan gratuito: la fecha debe ser al menos 2 días después de
+                  hoy.
                 </p>
               </div>
               <div class="form-group">
                 <label for="event-time">Hora</label>
-                <div style="display:flex; gap:0.5rem;">
+                <div style="display: flex; gap: 0.5rem">
                   <select
                     id="event-hour"
                     class="form-control"
                     required
                     aria-label="Hora del evento"
-                    style="flex: 1;"
+                    style="flex: 1"
                   >
                     <option value="" disabled selected>Hora</option>
                     <option value="00">00</option>
@@ -269,7 +290,7 @@
                     class="form-control"
                     required
                     aria-label="Minutos del evento"
-                    style="flex: 1;"
+                    style="flex: 1"
                   >
                     <option value="" disabled selected>Min</option>
                     <option value="00">00</option>
@@ -313,7 +334,7 @@
             </div>
 
             <div class="form-group">
-              <label for="event-contact">Contacto (Teléfono / Redes)</label>
+              <label for="event-contact">Contacto (Whatsapp)</label>
               <input
                 type="text"
                 id="event-contact"
@@ -324,13 +345,13 @@
             </div>
 
             <div class="form-group">
-              <label>Verificación Captcha</label>
+              <label>""</label>
               <div class="captcha-box">
                 <input type="checkbox" id="captcha-check" required />
                 <label
                   for="captcha-check"
                   style="margin: 0; font-weight: normal; cursor: pointer"
-                  >No soy un robot (reCAPTCHA simulado)</label
+                  >Confirmo que todos los datos ingresados son correctos</label
                 >
               </div>
             </div>
