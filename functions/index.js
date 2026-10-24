@@ -8,9 +8,9 @@ const db = admin.firestore();
 // Pega aquí la URL de tu Webhook de Make
 const WEBHOOK_MAKE = "https://hook.us1.make.com/TU_WEBHOOK_AQUI";
 
-// 1. EVENTOS DESTACADOS: Se envían a Make inmediatamente al aprobarse
+// 1. EVENTOS DESTACADOS
 exports.onEventoAprobado = functions
-  .region("southamerica-west1") // Cambia a la región de tu Firestore
+  .region("us-central1")
   .firestore.document("eventos/{eventoId}")
   .onUpdate(async (change, context) => {
     const antes = change.before.data();
@@ -25,9 +25,9 @@ exports.onEventoAprobado = functions
     }
   });
 
-// 2. EVENTOS NORMALES: Se envían el mismo día del evento a las 8:00 AM (Hora Argentina)
+// 2. EVENTOS NORMALES
 exports.publicarEventosDelDia = functions
-  .region("southamerica-west1")
+  .region("us-central1")
   .pubsub.schedule("0 8 * * *")
   .timeZone("America/Argentina/Mendoza")
   .onRun(async (context) => {
