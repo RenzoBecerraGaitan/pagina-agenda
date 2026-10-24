@@ -1,33 +1,38 @@
-const functions = require("firebase-functions/v1");
+const functions = require("firebase-functions/v1"); // para el scheduler
+const { onDocumentUpdated } = require("firebase-functions/v2/firestore");
 const admin = require("firebase-admin");
 const axios = require("axios");
 
 admin.initializeApp();
 const db = admin.firestore();
 
-// Pega aquí la URL de tu Webhook de Make
-const WEBHOOK_MAKE = "https://hook.us1.make.com/TU_WEBHOOK_AQUI";
+// Pega la URL de tu Webhook de Make
+const WEBHOOK_MAKE =
+  "https://hook.us2.make.com/pvl27nf9jp6kp1268xvnoirxb81hr0yv";
 
 // 1. EVENTOS DESTACADOS
-exports.onEventoAprobado = functions
-  .region("us-central1")
-  .firestore.document("eventos/{eventoId}")
-  .onUpdate(async (change, context) => {
-    const antes = change.before.data();
-    const despues = change.after.data();
+exports.onEventoAprobado = onDocumentUpdated(
+  {
+    document: "eventos/{eventoId}",
+    region: "southamerica-west1",
+  },
+  async (event) => {
+    const antes = event.data.before.data();
+    const despues = event.data.after.data();
 
     if (
       antes.estado !== "aprobado" &&
       despues.estado === "aprobado" &&
       despues.destacado === true
     ) {
-      await enviarAMake(context.params.eventoId, despues);
+      await enviarAMake(event.params.eventoId, despues);
     }
-  });
+  },
+);
 
-// 2. EVENTOS NORMALES
+// 2. EVENTOS NORMALES (Se envían a las 8 AM)
 exports.publicarEventosDelDia = functions
-  .region("us-central1")
+  .region("us-central1") // El scheduler de PubSub puede quedarse en us-central1
   .pubsub.schedule("0 8 * * *")
   .timeZone("America/Argentina/Mendoza")
   .onRun(async (context) => {
