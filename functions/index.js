@@ -1,20 +1,21 @@
-const functions = require("firebase-functions");
+const functions = require("firebase-functions/v1"); // Usamos el SDK v1 explícito
 const admin = require("firebase-admin");
 const axios = require("axios");
 
 admin.initializeApp();
 const db = admin.firestore();
-const WEBHOOK_MAKE =
-  "https://hook.us2.make.com/pvl27nf9jp6kp1268xvnoirxb81hr0yv";
 
-// 1. EVENTOS DESTACADOS (Envío Inmediato)
+// Pega aquí la URL de tu Webhook de Make
+const WEBHOOK_MAKE =
+  "https://hook.us1.make.com/pvl27nf9jp6kp1268xvnoirxb81hr0yv;";
+
+// 1. EVENTOS DESTACADOS: Se envían a Make inmediatamente al aprobarse
 exports.onEventoAprobado = functions.firestore
   .document("eventos/{eventoId}")
   .onUpdate(async (change, context) => {
     const antes = change.before.data();
     const despues = change.after.data();
 
-    // Si recién se aprueba Y ES DESTACADO
     if (
       antes.estado !== "aprobado" &&
       despues.estado === "aprobado" &&
@@ -24,12 +25,12 @@ exports.onEventoAprobado = functions.firestore
     }
   });
 
-// 2. EVENTOS NORMALES (Se ejecutan todos los días a las 8:00 AM Hora Argentina)
+// 2. EVENTOS NORMALES: Se envían el mismo día del evento a las 8:00 AM (Hora Argentina)
 exports.publicarEventosDelDia = functions.pubsub
   .schedule("0 8 * * *")
   .timeZone("America/Argentina/Mendoza")
   .onRun(async (context) => {
-    const hoyStr = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+    const hoyStr = new Date().toISOString().split("T")[0];
 
     const snapshot = await db
       .collection("eventos")
@@ -39,34 +40,38 @@ exports.publicarEventosDelDia = functions.pubsub
       .where("publicado", "==", false)
       .get();
 
-    if (snapshot.empty) return null;
+    if (snapshot.empty) {
+      console.log("No hay eventos normales pendientes para hoy.");
+      return null;
+    }
 
     for (const doc of snapshot.docs) {
       await enviarAMake(doc.id, doc.data());
-      await doc.ref.update({ publicado: true }); // Marcamos como publicado
+      await doc.ref.update({ publicado: true });
     }
   });
 
-// Función auxiliar para formatear y enviar el POST
+// Función auxiliar para formatear los datos
 async function enviarAMake(id, data) {
   try {
     await axios.post(WEBHOOK_MAKE, {
       id: id,
-      nombre: data.nombre,
-      descripcion: data.descripcion,
-      fecha: data.fecha,
-      hora: data.hora,
-      lugar: data.lugar,
-      direccion: data.direccion,
-      localidad: data.localidad,
+      nombre: data.nombre || "",
+      descripcion: data.descripcion || "",
+      fecha: data.fecha || "",
+      hora: data.hora || "",
+      lugar: data.lugar || "",
+      direccion: data.direccion || "",
+      localidad: data.localidad || "",
       ubicacion: data.ubicacion
         ? data.ubicacion.toLowerCase().trim()
         : "mendoza",
-      contacto: data.contacto,
-      imagenUrl: data.imagenUrl,
-      destacado: data.destacado,
+      contacto: data.contacto || "",
+      imagenUrl: data.imagenUrl || "",
+      destacado: data.destacado || false,
     });
+    console.log(`Evento ${id} enviado a Make correctamente.`);
   } catch (error) {
-    console.error(`Error enviando evento ${id} a Make:`, error);
+    console.error(`Error enviando el evento ${id} a Make:`, error);
   }
 }
