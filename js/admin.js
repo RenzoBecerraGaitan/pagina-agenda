@@ -1,5 +1,5 @@
 // Panel de Control y Administración de Eventos (/admin)
-import { db, storage, auth, firebaseConfig } from "./firebase-config.js";
+import { app, db, storage, auth, firebaseConfig } from "./firebase-config.js";
 import { googleProvider } from "./auth.js";
 import {
   fechaLocalHoy,
@@ -39,6 +39,10 @@ import {
   deleteDoc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import {
+  getFunctions,
+  httpsCallable,
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-functions.js";
 import {
   ref,
   deleteObject,
@@ -122,6 +126,8 @@ function describirErrorAdmin(error, accion) {
   } else if (code === "unauthenticated") {
     explicacion =
       "No hay una sesión de autenticación válida o el token expiró. Volvé a iniciar sesión.";
+  } else if (typeof code === "string" && code.startsWith("functions/")) {
+    explicacion = message;
   } else if (typeof code === "string" && code.startsWith("auth/")) {
     explicacion = "Error de autenticación.";
   } else if (code === "failed-precondition" || code === "aborted") {
@@ -360,12 +366,39 @@ export function renderizarBloqueados(contenedor) {
   `;
 }
 
+/**
+ * Publica el evento en Instagram (a través de la función publicarEnInstagram,
+ * que lo envía al escenario de Make). Solo se publica lo que el admin elige.
+ */
+export async function publicarInstagram(id, yaPublicado) {
+  const ev = todosLosEventos.find((x) => x.id === id);
+  const nombre = ev && ev.nombre ? ev.nombre : "este evento";
+  const mensaje = yaPublicado
+    ? `"${nombre}" ya se publicó en Instagram. ¿Querés publicarlo de nuevo?`
+    : `¿Publicar "${nombre}" en Instagram?`;
+  if (!confirm(mensaje)) return;
+
+  try {
+    await obtenerTokenValido();
+    const publicar = httpsCallable(
+      getFunctions(app, "southamerica-west1"),
+      "publicarEnInstagram",
+    );
+    await publicar({ eventoId: id });
+    alert("Enviado a Instagram. En unos segundos se publica desde Make.");
+    await cargarYRenderizarEventos();
+  } catch (error) {
+    alert(describirErrorAdmin(error, "publicar en Instagram"));
+  }
+}
+
 window.aprobarEvento = aprobarEvento;
 window.rechazarEvento = rechazarEvento;
 window.alternarDestacado = alternarDestacado;
 window.eliminarEvento = eliminarEvento;
 window.bloquearAutor = bloquearAutor;
 window.editarEvento = (id) => abrirEdicion(id);
+window.publicarInstagram = publicarInstagram;
 
 /**
  * Muestra un error visible dentro del listado del panel admin
@@ -573,6 +606,11 @@ function renderizarListadoAdmin(eventos, contenedor, tab) {
       const idLiteral = literalAtributo(ev.id);
       const imagenLiteral = literalAtributo(ev.imagenUrl || "");
 
+      const instagramPublicado = Boolean(ev.instagramPublicado);
+      const fechaInstagram =
+        ev.instagramFecha && typeof ev.instagramFecha.toDate === "function"
+          ? ev.instagramFecha.toDate().toLocaleString("es-AR")
+          : "";
       const precio = formatearPrecioEvento(ev);
       const linkEntradas = urlSegura(ev.linkEntradas);
       const redes = String(ev.redes || "").trim();
@@ -592,6 +630,11 @@ function renderizarListadoAdmin(eventos, contenedor, tab) {
                 ${
                   esDestacado
                     ? '<span class="badge" style="background: rgba(245, 158, 11, 0.15); color: var(--warning);"><i class="fa-solid fa-star"></i> Destacado</span>'
+                    : ""
+                }
+                ${
+                  instagramPublicado
+                    ? `<span class="badge" style="background: rgba(193, 53, 132, 0.12); color: #c13584;" title="${escapeHtml(fechaInstagram)}"><i class="fa-brands fa-instagram"></i> Publicado en Instagram</span>`
                     : ""
                 }
                 <span style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">
@@ -614,6 +657,7 @@ function renderizarListadoAdmin(eventos, contenedor, tab) {
                   : '<em style="color: var(--text-muted);">Sin descripción</em>'
               }</p>
               <div class="admin-datos-extra">
+                <span>🏷️ <strong>Plan:</strong> ${escapeHtml(ev.plan || "sin dato")}</span>
                 <span>💲 <strong>Precio:</strong> ${precio ? escapeHtml(precio) : "No especificado"}</span>
                 <span>📞 <strong>Teléfono:</strong> ${escapeHtml(ev.contacto || "No especificado")}</span>
                 <span>🎟️ <strong>Link de entradas:</strong> ${
@@ -644,6 +688,22 @@ function renderizarListadoAdmin(eventos, contenedor, tab) {
             >
               <i class="fa-solid fa-pen-to-square"></i> Editar
             </button>
+
+            <!-- Botón Instagram (solo eventos aprobados) -->
+            ${
+              ev.estado === "aprobado"
+                ? `
+              <button
+                class="btn btn-sm ${instagramPublicado ? "btn-outline" : "btn-instagram"}"
+                onclick="publicarInstagram(${idLiteral}, ${instagramPublicado})"
+                title="Enviar este evento a Instagram"
+              >
+                <i class="fa-brands fa-instagram"></i>
+                ${instagramPublicado ? "Reenviar a Instagram" : "Publicar en Instagram"}
+              </button>
+            `
+                : ""
+            }
 
             <!-- Botón Destacar (alterna true/false) -->
             <button

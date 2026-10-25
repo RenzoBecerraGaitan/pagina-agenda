@@ -1599,3 +1599,14 @@ footer {
     transition: none;
   }
 }
+
+/* Botón de Instagram del panel de administración */
+.btn-instagram {
+  background: #c13584;
+  color: #fff;
+  box-shadow: var(--shadow);
+}
+
+.btn-instagram:hover {
+  background: #a02a6c;
+}
