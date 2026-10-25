@@ -36,22 +36,28 @@ exports.publicarEventosDelDia = functions
   .pubsub.schedule("0 8 * * *")
   .timeZone("America/Argentina/Mendoza")
   .onRun(async (context) => {
-    const hoyStr = new Date().toISOString().split("T")[0];
+    // Fecha de hoy en Mendoza (AAAA-MM-DD). toISOString() usaría UTC.
+    const hoyStr = new Date().toLocaleDateString("en-CA", {
+      timeZone: "America/Argentina/Mendoza",
+    });
 
+    // "publicado" no se consulta en Firestore: los eventos nuevos no traen ese
+    // campo y un where("publicado", "==", false) los dejaría afuera.
     const snapshot = await db
       .collection("eventos")
       .where("estado", "==", "aprobado")
       .where("destacado", "==", false)
       .where("fecha", "==", hoyStr)
-      .where("publicado", "==", false)
       .get();
 
-    if (snapshot.empty) {
+    const pendientes = snapshot.docs.filter((d) => d.data().publicado !== true);
+
+    if (pendientes.length === 0) {
       console.log("No hay eventos normales pendientes para hoy.");
       return null;
     }
 
-    for (const doc of snapshot.docs) {
+    for (const doc of pendientes) {
       await enviarAMake(doc.id, doc.data());
       await doc.ref.update({ publicado: true });
     }
@@ -72,6 +78,9 @@ async function enviarAMake(id, data) {
         ? data.ubicacion.toLowerCase().trim()
         : "mendoza",
       contacto: data.contacto || "",
+      precio: data.precio || "",
+      linkEntradas: data.linkEntradas || "",
+      redes: data.redes || "",
       imagenUrl: data.imagenUrl || "",
       destacado: data.destacado || false,
     });

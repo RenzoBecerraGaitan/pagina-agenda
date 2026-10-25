@@ -10,6 +10,11 @@
     <title>
       Qué hacer en San Rafael, Alvear y Malargüe | Agenda del Sur Mendocino
     </title>
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="es_AR" />
+    <meta property="og:site_name" content="Agenda Cultural Mendoza" />
+    <meta property="og:title" content="Qué hacer en San Rafael, Alvear y Malargüe | Agenda del Sur Mendocino" />
+    <meta property="og:description" content="¿Buscás qué hacer en San Rafael, General Alvear o Malargüe? Consultá la agenda del Sur mendocino con eventos, recitales, peñas, teatro y sunsets." />
     <link rel="stylesheet" href="../css/styles.css" />
     <link
       rel="stylesheet"
@@ -61,10 +66,52 @@
         </button>
       </section>
 
+      <section
+        id="filtros-eventos"
+        class="filtros"
+        aria-label="Filtrar eventos por fecha"
+      >
+        <div class="filtros-lista" role="group" aria-label="Mostrar eventos de">
+          <button
+            type="button"
+            class="filtro-chip activo"
+            data-filtro="todos"
+            aria-pressed="true"
+          >
+            Todos <span class="chip-count"></span>
+          </button>
+          <button
+            type="button"
+            class="filtro-chip"
+            data-filtro="hoy"
+            aria-pressed="false"
+          >
+            Hoy <span class="chip-count"></span>
+          </button>
+          <button
+            type="button"
+            class="filtro-chip"
+            data-filtro="manana"
+            aria-pressed="false"
+          >
+            Mañana <span class="chip-count"></span>
+          </button>
+          <button
+            type="button"
+            class="filtro-chip"
+            data-filtro="semana"
+            aria-pressed="false"
+          >
+            Esta semana <span class="chip-count"></span>
+          </button>
+        </div>
+      </section>
+
       <section>
         <div id="events-grid" class="events-grid">
-          <!-- Events will be rendered dynamically via app.js -->
+          <!-- Events will be rendered dynamically via eventos.js -->
         </div>
+        <div id="events-pagination" class="paginacion-wrap" hidden></div>
       </section>
 
       <!-- BLOQUE SEO LOCAL SUR MENDOCINO -->
@@ -199,9 +246,7 @@
             </div>
 
             <div class="form-group">
-              <label for="event-image"
-                >Flyer / Banner del Evento (Imagen)</label
-              >
+              <label for="event-image">Flyer / Banner del Evento (Imagen)</label>
               <input
                 type="file"
                 id="event-image"
@@ -209,6 +254,43 @@
                 class="form-control"
                 required
               />
+              <p class="plan-hint">
+                La imagen se publica en formato vertical 4:5 (1080×1350 px).
+                Elegí cómo encuadrarla:
+              </p>
+              <div id="image-preview-box" class="img-preview-box" hidden>
+                <img
+                  id="image-preview"
+                  class="img-preview"
+                  alt="Vista previa de la imagen del evento"
+                />
+                <div class="img-preview-side">
+                  <div
+                    class="img-modo"
+                    role="radiogroup"
+                    aria-label="Encuadre de la imagen"
+                  >
+                    <label class="img-modo-op"
+                      ><input
+                        type="radio"
+                        name="image-mode"
+                        value="recortar"
+                        checked
+                      />
+                      Recortar para llenar el cuadro</label
+                    >
+                    <label class="img-modo-op"
+                      ><input type="radio" name="image-mode" value="completa" />
+                      Mostrar la imagen completa</label
+                    >
+                  </div>
+                  <p
+                    id="image-preview-status"
+                    class="plan-hint"
+                    aria-live="polite"
+                  ></p>
+                </div>
+              </div>
             </div>
 
             <div class="form-group">
@@ -336,15 +418,105 @@
             </div>
 
             <div class="form-group">
-              <label for="event-contact">Contacto (Whatsapp)</label>
+              <label for="event-price-type">Precio de la entrada</label>
+              <select id="event-price-type" class="form-control" required>
+                <option value="" disabled selected>Seleccioná una opción</option>
+                <option value="fijo">Precio fijo (ej: $5.000)</option>
+                <option value="desde">Varios precios: desde...</option>
+                <option value="gratuito">Entrada gratuita</option>
+                <option value="colaboracion">A colaboración</option>
+              </select>
+            </div>
+
+            <div class="form-group" id="price-value-group" hidden>
+              <label for="event-price-value" id="price-value-label"
+                >Valor de la entrada</label
+              >
+              <div class="input-prefix">
+                <span aria-hidden="true">$</span>
+                <input
+                  type="text"
+                  id="event-price-value"
+                  class="form-control"
+                  inputmode="numeric"
+                  autocomplete="off"
+                  placeholder="5.000"
+                />
+              </div>
+            </div>
+
+            <div class="form-group" id="price-detail-group" hidden>
+              <label for="event-price-detail"
+                >¿Qué se colabora? (opcional)</label
+              >
               <input
-                type="number"
-                id="event-contact"
+                type="text"
+                id="event-price-detail"
                 class="form-control"
-                placeholder="Ej: 2610000000"
-                required
+                placeholder="Ej: alimento no perecedero, a la gorra"
               />
             </div>
+
+            <fieldset class="entradas-box">
+              <legend>¿Cómo consigue la gente su entrada?</legend>
+              <p class="entradas-aviso">
+                <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+                Estos datos se publican junto al evento y
+                <strong>es ahí donde la gente va a conseguir su entrada</strong>
+                o a consultar. Completá <strong>al menos uno</strong>: con uno
+                alcanza.
+              </p>
+
+              <div class="form-group">
+                <label for="event-contact"
+                  >Teléfono / WhatsApp
+                  <span class="tag-reco">Recomendado</span></label
+                >
+                <input
+                  type="tel"
+                  id="event-contact"
+                  class="form-control"
+                  placeholder="Ej: +54 9 260 4000000"
+                />
+              </div>
+
+              <div class="form-group">
+                <label for="event-link"
+                  >Link para comprar entradas
+                  <span class="tag-opc">Opcional</span></label
+                >
+                <input
+                  type="text"
+                  id="event-link"
+                  class="form-control"
+                  inputmode="url"
+                  autocapitalize="none"
+                  autocomplete="off"
+                  placeholder="https://www.tusentradas.com/evento"
+                />
+              </div>
+
+              <div class="form-group">
+                <label for="event-redes"
+                  >Instagram para mencionar
+                  <span class="tag-opc">Opcional</span></label
+                >
+                <input
+                  type="text"
+                  id="event-redes"
+                  class="form-control"
+                  autocapitalize="none"
+                  autocomplete="off"
+                  placeholder="@tuusuario"
+                />
+                <p class="plan-hint">
+                  Si publicamos tu evento en Instagram, te mencionamos. Podés
+                  poner hasta 3 usuarios.
+                </p>
+              </div>
+
+              <p id="entradas-error" class="form-error" role="alert" hidden></p>
+            </fieldset>
 
             <div class="form-group">
               <label>checkbox</label>

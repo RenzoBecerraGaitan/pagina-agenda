@@ -1,8 +1,27 @@
 // Panel de Control y Administración de Eventos (/admin)
 import { db, storage, auth, firebaseConfig } from "./firebase-config.js";
 import { googleProvider } from "./auth.js";
-import { fechaLocalHoy } from "./eventos.js";
-import { normalizarTelefonoAR } from "./utils.js";
+import {
+  fechaLocalHoy,
+  LOCALIDADES_POR_ZONA,
+  poblarSelectLocalidades,
+  MAX_DESCRIPCION,
+} from "./eventos.js";
+import {
+  normalizarTelefonoAR,
+  formatearPrecioEvento,
+  urlSegura,
+  validarEntradas,
+  paginar,
+  renderPaginacion,
+  POR_PAGINA,
+} from "./utils.js";
+import { crearControladorImagen } from "./imagen.js";
+import {
+  configurarCamposPrecio,
+  leerPrecio,
+  fijarPrecio,
+} from "./campos-evento.js";
 import {
   signInWithPopup,
   signOut,
@@ -23,6 +42,8 @@ import {
 import {
   ref,
   deleteObject,
+  uploadBytes,
+  getDownloadURL,
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
 // Configuración explícita de persistencia en localStorage para evitar bucles o pérdida de sesión
@@ -31,6 +52,7 @@ setPersistence(auth, browserLocalPersistence).catch((err) => {
 });
 
 let pestañaActiva = "pendientes";
+let paginaAdmin = 1; // página actual del listado (15 por página)
 let todosLosEventos = [];
 // Mapa de autores por ID de evento: { [eventoId]: { uid, email, nombre, fechaCreacion } }
 let mapaAutores = {};
@@ -343,6 +365,7 @@ window.rechazarEvento = rechazarEvento;
 window.alternarDestacado = alternarDestacado;
 window.eliminarEvento = eliminarEvento;
 window.bloquearAutor = bloquearAutor;
+window.editarEvento = (id) => abrirEdicion(id);
 
 /**
  * Muestra un error visible dentro del listado del panel admin
@@ -450,6 +473,7 @@ export async function cargarYRenderizarEventos() {
   if (pestañaActiva === "historial") listaFiltrada = historial;
 
   if (pestañaActiva === "bloqueados") {
+    limpiarPaginacionAdmin();
     renderizarBloqueados(adminList);
     return;
   }
@@ -479,8 +503,18 @@ function literalAtributo(valor) {
   return `'${escapadoHtml}'`;
 }
 
+function limpiarPaginacionAdmin() {
+  const cont = document.getElementById("admin-pagination");
+  if (cont) {
+    cont.innerHTML = "";
+    cont.hidden = true;
+    cont.onclick = null;
+  }
+}
+
 function renderizarListadoAdmin(eventos, contenedor, tab) {
   if (eventos.length === 0) {
+    limpiarPaginacionAdmin();
     contenedor.innerHTML = `
       <div class="no-events" style="text-align: center; padding: 2.5rem; background: var(--surface); border: 1px dashed var(--border-color); border-radius: var(--radius);">
         <i class="fa-solid fa-folder-open" style="font-size: 2.5rem; margin-bottom: 0.75rem; color: var(--text-muted);"></i>
@@ -498,7 +532,21 @@ function renderizarListadoAdmin(eventos, contenedor, tab) {
     return (a.fecha || "").localeCompare(b.fecha || "");
   });
 
-  contenedor.innerHTML = eventos
+  // Paginación: 15 eventos por página
+  const { items, pagina } = paginar(eventos, paginaAdmin, POR_PAGINA);
+  paginaAdmin = pagina;
+  renderPaginacion(document.getElementById("admin-pagination"), {
+    total: eventos.length,
+    pagina,
+    porPagina: POR_PAGINA,
+    onCambiar: (nueva) => {
+      paginaAdmin = nueva;
+      renderizarListadoAdmin(eventos, contenedor, tab);
+      contenedor.scrollIntoView({ block: "start" });
+    },
+  });
+
+  contenedor.innerHTML = items
     .map((ev) => {
       let badgeClass = "badge-pending";
       let statusText = "Pendiente";
@@ -513,6 +561,7 @@ function renderizarListadoAdmin(eventos, contenedor, tab) {
       const imagen =
         ev.imagenUrl ||
         "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=600&q=80";
+      const imagenLink = urlSegura(imagen);
       const esDestacado = Boolean(ev.destacado);
       const autor = mapaAutores[ev.id];
       const autorBloqueado = autor && !!mapaBloqueados[autor.uid];
@@ -524,13 +573,20 @@ function renderizarListadoAdmin(eventos, contenedor, tab) {
       const idLiteral = literalAtributo(ev.id);
       const imagenLiteral = literalAtributo(ev.imagenUrl || "");
 
+      const precio = formatearPrecioEvento(ev);
+      const linkEntradas = urlSegura(ev.linkEntradas);
+      const redes = String(ev.redes || "").trim();
+      const descripcion = String(ev.descripcion || "").trim();
+
       return `
         <div class="admin-item" style="border-left: 4px solid ${
           esDestacado ? "var(--warning)" : "var(--primary)"
         };">
           <div class="admin-item-info">
-            <img src="${imagen}" alt="${escapeHtml(ev.nombre || "Evento")}" class="admin-item-img">
-            <div>
+            <a ${imagenLink ? `href="${escapeHtml(imagenLink)}" target="_blank" rel="noopener noreferrer"` : ""} class="admin-item-img-link" title="Abrir la imagen en tamaño completo">
+              <img src="${escapeHtml(imagen)}" alt="${escapeHtml(ev.nombre || "Evento")}" class="admin-item-img" loading="lazy">
+            </a>
+            <div class="admin-item-datos">
               <div style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.35rem; flex-wrap: wrap;">
                 <span class="badge ${badgeClass}">${statusText}</span>
                 ${
@@ -542,25 +598,37 @@ function renderizarListadoAdmin(eventos, contenedor, tab) {
                   📍 ${escapeHtml(ev.ubicacion || "general")}
                 </span>
               </div>
-              <h4 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 0.25rem;">
-                ${ev.nombre || ev.title || "Sin título"}
+              <h4 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 0.25rem; overflow-wrap: anywhere;">
+                ${escapeHtml(ev.nombre || ev.title || "Sin título")}
               </h4>
               <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.25rem;">
-                📅 <strong>Fecha:</strong> ${ev.fecha || "-"} a las ${ev.hora || "--:--"}hs | 
-                🏛️ <strong>Lugar:</strong> ${ev.lugar || "-"} (${ev.direccion || "-"})
+                📅 <strong>Fecha:</strong> ${escapeHtml(ev.fecha || "-")} a las ${escapeHtml(ev.hora || "--:--")}hs |
+                🏛️ <strong>Lugar:</strong> ${escapeHtml(ev.lugar || "-")} (${escapeHtml(ev.direccion || "-")})
               </p>
               <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 0.25rem;">
                 🏘️ <strong>Localidad:</strong> ${escapeHtml(ev.localidad || "-")}
               </p>
-              <p style="font-size: 0.82rem; color: var(--text-muted);">
-                📞 <strong>Contacto:</strong> ${escapeHtml(ev.contacto || "No especificado")}
-              </p>
+              <p class="admin-desc">${
+                descripcion
+                  ? escapeHtml(descripcion)
+                  : '<em style="color: var(--text-muted);">Sin descripción</em>'
+              }</p>
+              <div class="admin-datos-extra">
+                <span>💲 <strong>Precio:</strong> ${precio ? escapeHtml(precio) : "No especificado"}</span>
+                <span>📞 <strong>Teléfono:</strong> ${escapeHtml(ev.contacto || "No especificado")}</span>
+                <span>🎟️ <strong>Link de entradas:</strong> ${
+                  linkEntradas
+                    ? `<a href="${escapeHtml(linkEntradas)}" target="_blank" rel="noopener noreferrer nofollow">${escapeHtml(linkEntradas)}</a>`
+                    : "No especificado"
+                }</span>
+                <span>📸 <strong>Instagram:</strong> ${redes ? escapeHtml(redes) : "No especificado"}</span>
+              </div>
               ${autor
-                ? `<p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 0.25rem;">
+                ? `<p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 0.35rem; margin-bottom: 0.25rem;">
                       👤 <strong>Autor:</strong> ${escapeHtml(autor.nombre || autor.email || "")} (${escapeHtml(autor.email || "")})
                       ${autorBloqueado ? ' <span class="badge" style="background: var(--danger); color: #fff;">Autor bloqueado</span>' : ""}
                     </p>`
-                : `<p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 0.25rem;">
+                : `<p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 0.35rem; margin-bottom: 0.25rem;">
                       👤 <strong>Autor:</strong> sin datos
                     </p>`
               }
@@ -568,6 +636,15 @@ function renderizarListadoAdmin(eventos, contenedor, tab) {
           </div>
 
           <div class="admin-actions">
+            <!-- Botón Editar -->
+            <button
+              class="btn btn-outline btn-sm"
+              onclick="editarEvento(${idLiteral})"
+              title="Editar los datos del evento"
+            >
+              <i class="fa-solid fa-pen-to-square"></i> Editar
+            </button>
+
             <!-- Botón Destacar (alterna true/false) -->
             <button
               class="btn btn-sm ${esDestacado ? "btn-primary" : "btn-outline"}"
@@ -638,6 +715,260 @@ function renderizarListadoAdmin(eventos, contenedor, tab) {
     })
     .join("");
 }
+
+// ---------------------------------------------------------------------------
+// Edición de eventos (el admin puede corregir cualquier dato ante un problema)
+// ---------------------------------------------------------------------------
+let eventoEnEdicion = null;
+let controladorImagenEdicion = null;
+let controladorPrecioEdicion = null;
+
+function elEdit(id) {
+  return document.getElementById(id);
+}
+
+function precioEditEls() {
+  return {
+    tipo: elEdit("edit-price-type"),
+    grupoValor: elEdit("edit-price-value-group"),
+    valor: elEdit("edit-price-value"),
+    etiquetaValor: elEdit("edit-price-value-label"),
+    grupoDetalle: elEdit("edit-price-detail-group"),
+    detalle: elEdit("edit-price-detail"),
+  };
+}
+
+function mostrarErrorEdicion(mensaje) {
+  const aviso = elEdit("edit-entradas-error");
+  if (!aviso) return;
+  aviso.textContent = mensaje || "";
+  aviso.hidden = !mensaje;
+}
+
+function cerrarEdicion() {
+  const modal = elEdit("edit-modal");
+  if (modal) modal.classList.remove("active");
+  eventoEnEdicion = null;
+  if (controladorImagenEdicion) controladorImagenEdicion.reset();
+}
+
+/** Abre el modal de edición con los datos actuales del evento. */
+export function abrirEdicion(id) {
+  const ev = todosLosEventos.find((x) => x.id === id);
+  if (!ev) {
+    alert("No se encontró el evento. Recargá el panel e intentá de nuevo.");
+    return;
+  }
+  eventoEnEdicion = ev;
+
+  elEdit("edit-title").value = ev.nombre || "";
+  elEdit("edit-desc").value = ev.descripcion || "";
+  elEdit("edit-date").value = ev.fecha || "";
+  elEdit("edit-time").value = ev.hora || "";
+  elEdit("edit-place").value = ev.lugar || "";
+  elEdit("edit-address").value = ev.direccion || "";
+
+  const zona = LOCALIDADES_POR_ZONA[ev.ubicacion] ? ev.ubicacion : "mendoza";
+  elEdit("edit-zone").value = zona;
+  const selLocalidad = elEdit("edit-locality");
+  poblarSelectLocalidades(zona, selLocalidad);
+  if (ev.localidad) {
+    if (!LOCALIDADES_POR_ZONA[zona].includes(ev.localidad)) {
+      // Localidad cargada antes de la lista cerrada: se conserva como opción.
+      const extra = document.createElement("option");
+      extra.value = ev.localidad;
+      extra.textContent = ev.localidad;
+      selLocalidad.appendChild(extra);
+    }
+    selLocalidad.value = ev.localidad;
+  }
+
+  fijarPrecio(precioEditEls(), ev, controladorPrecioEdicion);
+
+  elEdit("edit-contact").value = ev.contacto || "";
+  elEdit("edit-link").value = ev.linkEntradas || "";
+  elEdit("edit-redes").value = ev.redes || "";
+  mostrarErrorEdicion("");
+
+  const imgActual = elEdit("edit-img-actual");
+  imgActual.src = ev.imagenUrl || "";
+  if (controladorImagenEdicion) controladorImagenEdicion.reset();
+
+  elEdit("edit-modal").classList.add("active");
+  const contenedor = document.querySelector("#edit-modal .modal-container");
+  if (contenedor) contenedor.scrollTop = 0;
+}
+
+async function guardarEdicion(e) {
+  e.preventDefault();
+  const ev = eventoEnEdicion;
+  if (!ev) return;
+
+  const nombre = elEdit("edit-title").value.trim();
+  const descripcion = elEdit("edit-desc").value.trim();
+  const fecha = elEdit("edit-date").value;
+  const hora = elEdit("edit-time").value;
+  const lugar = elEdit("edit-place").value.trim();
+  const direccion = elEdit("edit-address").value.trim();
+  const ubicacion = elEdit("edit-zone").value;
+  const localidad = elEdit("edit-locality").value;
+
+  if (!nombre || !lugar || !direccion || !fecha || !hora) {
+    alert("Completá nombre, fecha, hora, lugar y dirección.");
+    return;
+  }
+  if (descripcion.length > MAX_DESCRIPCION) {
+    alert(`La descripción no puede superar los ${MAX_DESCRIPCION} caracteres.`);
+    return;
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)) {
+    alert("La fecha o la hora no tienen un formato válido.");
+    return;
+  }
+  if (!LOCALIDADES_POR_ZONA[ubicacion]) {
+    alert("Elegí una zona válida.");
+    return;
+  }
+  const localidadValida =
+    LOCALIDADES_POR_ZONA[ubicacion].includes(localidad) ||
+    (ubicacion === ev.ubicacion && localidad === ev.localidad && localidad);
+  if (!localidadValida) {
+    alert("Elegí una localidad que corresponda a la zona seleccionada.");
+    return;
+  }
+
+  const precio = leerPrecio(precioEditEls());
+  if (!precio.ok) {
+    alert(precio.error);
+    elEdit("edit-price-type").focus();
+    return;
+  }
+
+  const entradas = validarEntradas({
+    contacto: elEdit("edit-contact").value,
+    linkEntradas: elEdit("edit-link").value,
+    redes: elEdit("edit-redes").value,
+  });
+  if (!entradas.ok) {
+    mostrarErrorEdicion(entradas.error);
+    elEdit("edit-entradas-error").scrollIntoView({ block: "center" });
+    return;
+  }
+  mostrarErrorEdicion("");
+
+  const campos = {
+    nombre,
+    descripcion,
+    fecha,
+    hora,
+    lugar,
+    direccion,
+    ubicacion,
+    localidad,
+    contacto: entradas.contacto,
+    linkEntradas: entradas.linkEntradas,
+    redes: entradas.redes,
+    precioTipo: precio.precioTipo,
+    precioValor: precio.precioValor,
+    precioDetalle: precio.precioDetalle,
+    precio: precio.precio,
+  };
+
+  const btn = elEdit("edit-save");
+  const textoOriginal = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...';
+
+  let refNueva = null;
+  try {
+    if (firebaseConfig.apiKey) {
+      await obtenerTokenValido();
+
+      // Imagen nueva (opcional): se procesa a 4:5, JPEG 0.9, y se sube.
+      const archivoNuevo = controladorImagenEdicion
+        ? controladorImagenEdicion.getArchivo()
+        : null;
+      if (archivoNuevo) {
+        const blob = await controladorImagenEdicion.getBlob();
+        const base =
+          archivoNuevo.name
+            .replace(/\.[^/.]+$/, "")
+            .replace(/[^a-zA-Z0-9._-]/g, "_")
+            .slice(0, 60) || "evento";
+        refNueva = ref(storage, `eventos/${Date.now()}_${base}.jpg`);
+        const snap = await uploadBytes(refNueva, blob, {
+          contentType: "image/jpeg",
+          cacheControl: "public,max-age=31536000,immutable",
+        });
+        campos.imagenUrl = await getDownloadURL(snap.ref);
+      }
+
+      await updateDoc(doc(db, "eventos", ev.id), campos);
+
+      // Se borra la imagen anterior (mejor esfuerzo) solo si se reemplazó.
+      if (campos.imagenUrl && ev.imagenUrl) {
+        const pathViejo = extraerPathStorage(ev.imagenUrl);
+        if (pathViejo) {
+          try {
+            await deleteObject(ref(storage, pathViejo));
+          } catch (errBorrado) {
+            console.warn("[admin] No se pudo borrar la imagen anterior:", errBorrado);
+          }
+        }
+      }
+    } else {
+      actualizarEventoLocal(ev.id, campos);
+    }
+
+    cerrarEdicion();
+    alert("Evento actualizado correctamente.");
+    await cargarYRenderizarEventos();
+  } catch (error) {
+    // Si la imagen nueva ya se subió pero falló el guardado, se limpia.
+    if (refNueva) {
+      try {
+        await deleteObject(refNueva);
+      } catch (_) {
+        /* mejor esfuerzo */
+      }
+    }
+    alert(describirErrorAdmin(error, "guardar los cambios del evento"));
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = textoOriginal;
+  }
+}
+
+function initEdicion() {
+  const modal = elEdit("edit-modal");
+  if (!modal) return;
+
+  controladorImagenEdicion = crearControladorImagen({
+    input: elEdit("edit-image"),
+    caja: elEdit("edit-image-preview-box"),
+    img: elEdit("edit-image-preview"),
+    radios: Array.from(document.querySelectorAll('input[name="edit-image-mode"]')),
+    estado: elEdit("edit-image-preview-status"),
+  });
+  controladorPrecioEdicion = configurarCamposPrecio(precioEditEls());
+
+  elEdit("edit-zone").addEventListener("change", (e) => {
+    poblarSelectLocalidades(e.target.value, elEdit("edit-locality"));
+  });
+  ["edit-contact", "edit-link", "edit-redes"].forEach((id) =>
+    elEdit(id).addEventListener("input", () => mostrarErrorEdicion("")),
+  );
+  elEdit("edit-form").addEventListener("submit", guardarEdicion);
+  elEdit("edit-close").addEventListener("click", cerrarEdicion);
+  elEdit("edit-cancel").addEventListener("click", cerrarEdicion);
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) cerrarEdicion();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && modal.classList.contains("active")) cerrarEdicion();
+  });
+}
+
 // Métodos de respaldo para entorno local de prueba sin API keys
 function obtenerEventosLocales() {
   const datos = localStorage.getItem("agenda_events_admin");
@@ -945,6 +1276,9 @@ function initAdmin() {
     });
   }
 
+  // Edición de eventos
+  initEdicion();
+
   // Guardar links de WhatsApp
   const btnGuardarWa = document.getElementById("btn-guardar-whatsapp");
   if (btnGuardarWa) {
@@ -993,6 +1327,7 @@ function initAdmin() {
     btn.addEventListener("click", (e) => {
       const targetBtn = e.currentTarget;
       pestañaActiva = targetBtn.getAttribute("data-tab");
+      paginaAdmin = 1;
 
       tabButtons.forEach((b) => {
         b.classList.remove("btn-primary");

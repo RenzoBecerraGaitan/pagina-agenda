@@ -471,7 +471,7 @@ header {
 
 .event-img {
   width: 100%;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 4 / 5;
   height: auto;
   object-fit: cover;
   object-position: center;
@@ -747,18 +747,51 @@ textarea.form-control {
 
 .admin-item-info {
   display: flex;
+  flex-direction: column;
   gap: 1rem;
-  align-items: center;
+  align-items: stretch;
   min-width: 0;
+  flex: 1;
+}
+
+/* Imagen del evento en el panel: se ve completa (contain) y abre en grande */
+.admin-item-img-link {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 4 / 5;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #f1f5f9;
+  border: 1px solid var(--border-color);
+  flex-shrink: 0;
+  align-self: center;
 }
 
 .admin-item-img {
-  width: 60px;
-  height: 60px;
-  max-width: 100%;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.admin-item-datos {
+  min-width: 0;
+  flex: 1;
+}
+
+.admin-item-datos p {
+  overflow-wrap: anywhere;
+}
+
+.admin-desc {
+  white-space: pre-line;
+  font-size: 0.88rem;
+  color: var(--text-main);
+  background: var(--bg-color);
   border-radius: 8px;
-  object-fit: cover;
-  flex-shrink: 0;
+  padding: 0.5rem 0.7rem;
+  margin: 0.4rem 0;
 }
 
 .badge {
@@ -824,12 +857,6 @@ footer {
 
   .hero h1 {
     font-size: 2.5rem;
-  }
-
-  .admin-item {
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
   }
 
   /* Nav en tablet: ocultar hamburguesa, mostrar links en línea */
@@ -918,12 +945,6 @@ footer {
 
   .hero h1 {
     font-size: 2.5rem;
-  }
-
-  .admin-item {
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
   }
 
   /* Ajustes SEO para Tablet */
@@ -1119,5 +1140,462 @@ footer {
 @media (min-width: 768px) {
   .planes-lista {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+
+/* ==========================================================================
+   Filtros por fecha y paginación (mobile-first)
+   ========================================================================== */
+.filtros {
+  margin-bottom: 1.25rem;
+  scroll-margin-top: 80px;
+}
+
+.filtros-lista {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding: 0.15rem 0.15rem 0.5rem;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.filtros-lista::-webkit-scrollbar {
+  display: none;
+}
+
+.filtro-chip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  padding: 0.5rem 1rem;
+  border: 2px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.filtro-chip:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.filtro-chip:focus-visible,
+.pag-btn:focus-visible,
+.share-opcion:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.filtro-chip.activo {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.chip-count {
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: rgba(100, 116, 139, 0.15);
+  border-radius: 999px;
+  padding: 0.05rem 0.45rem;
+}
+
+.chip-count:empty {
+  display: none;
+}
+
+.filtro-chip.activo .chip-count {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.paginacion-wrap {
+  margin-top: 1.5rem;
+}
+
+.paginacion {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.pag-btn {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 0.6rem;
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.pag-btn:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.pag-btn.actual {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+  cursor: default;
+}
+
+.pag-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pag-info {
+  padding: 0 0.75rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.pag-puntos {
+  color: var(--text-muted);
+  padding: 0 0.1rem;
+}
+
+/* En celular: "Página X de Y"; los números aparecen desde 520px */
+.pag-num,
+.pag-puntos {
+  display: none;
+}
+
+@media (min-width: 520px) {
+  .pag-num,
+  .pag-puntos {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .pag-info {
+    display: none;
+  }
+}
+
+/* ==========================================================================
+   Tarjetas: precio, entradas y compartir
+   ========================================================================== */
+.event-card {
+  scroll-margin-top: 90px;
+}
+
+.event-card.evento-compartido {
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.45), var(--shadow-lg);
+}
+
+.event-precio strong,
+.event-precio {
+  color: var(--text-main);
+}
+
+.event-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: auto;
+}
+
+.event-actions .btn {
+  flex: 1 1 140px;
+  min-height: 44px;
+  padding: 0.55rem 0.9rem;
+  font-size: 0.95rem;
+}
+
+.share-menu {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  padding: 0.6rem;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+}
+
+.share-menu[hidden] {
+  display: none;
+}
+
+.share-opcion {
+  flex: 1 1 130px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 44px;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.share-opcion:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* ==========================================================================
+   Formulario de carga: precio, entradas, imagen
+   ========================================================================== */
+.input-prefix {
+  display: flex;
+  align-items: stretch;
+}
+
+.input-prefix > span {
+  display: flex;
+  align-items: center;
+  padding: 0 0.85rem;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-right: none;
+  border-radius: var(--radius) 0 0 var(--radius);
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.input-prefix > .form-control {
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.entradas-box {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem 0.3rem;
+  margin: 0 0 1rem;
+  min-width: 0;
+}
+
+.entradas-box legend {
+  padding: 0 0.4rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.entradas-aviso {
+  background: rgba(99, 102, 241, 0.08);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.entradas-aviso i {
+  color: var(--primary);
+  margin-right: 0.25rem;
+}
+
+.tag-reco,
+.tag-opc {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+.tag-reco {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--accent-dark);
+}
+
+.tag-opc {
+  background: rgba(100, 116, 139, 0.15);
+  color: var(--text-muted);
+}
+
+.form-error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: var(--danger);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 0.9rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.form-error[hidden] {
+  display: none;
+}
+
+.img-preview-box {
+  display: flex;
+  gap: 0.9rem;
+  align-items: flex-start;
+  margin-top: 0.6rem;
+}
+
+.img-preview-box[hidden] {
+  display: none;
+}
+
+.img-preview {
+  width: 120px;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: #f1f5f9;
+  flex-shrink: 0;
+}
+
+.img-preview-side {
+  flex: 1;
+  min-width: 0;
+}
+
+.img-modo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.form-group .img-modo-op {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 40px;
+  margin: 0;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.plan-hint.error {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+@media (max-width: 380px) {
+  .img-preview-box {
+    flex-direction: column;
+  }
+}
+
+/* ==========================================================================
+   Panel de administración: ficha de evento y edición
+   ========================================================================== */
+.admin-datos-extra {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.admin-datos-extra a {
+  color: var(--primary);
+  text-decoration: underline;
+  overflow-wrap: anywhere;
+}
+
+#edit-modal .form-group {
+  margin-bottom: 0.9rem;
+}
+
+.edit-imagen-actual {
+  display: flex;
+  gap: 0.9rem;
+  align-items: flex-start;
+  margin-bottom: 0.5rem;
+}
+
+.edit-imagen-actual img {
+  width: 110px;
+  aspect-ratio: 4 / 5;
+  object-fit: contain;
+  background: #f1f5f9;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+}
+
+.edit-acciones {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.edit-acciones .btn {
+  width: 100%;
+  min-height: 48px;
+}
+
+@media (min-width: 560px) {
+  .edit-acciones {
+    flex-direction: row;
+    justify-content: flex-end;
+  }
+
+  .edit-acciones .btn {
+    width: auto;
+  }
+}
+
+@media (min-width: 768px) {
+  .admin-item-img-link {
+    width: 200px;
+    align-self: flex-start;
+  }
+
+  .admin-item-info {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+}
+
+@media (min-width: 900px) {
+  .admin-item {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .admin-item > .admin-actions {
+    flex-direction: column;
+    align-items: stretch;
+    width: 170px;
+    flex-shrink: 0;
+  }
+
+  .admin-item > .admin-actions .btn {
+    justify-content: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .filtro-chip,
+  .pag-btn,
+  .event-card {
+    transition: none;
   }
 }

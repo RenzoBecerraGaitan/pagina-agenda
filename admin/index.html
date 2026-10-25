@@ -206,9 +206,232 @@
           <div id="admin-events-list" class="admin-list">
             <!-- Renderizado dinámico desde Firestore -->
           </div>
+          <div id="admin-pagination" class="paginacion-wrap" hidden></div>
         </section>
       </div>
     </main>
+
+    <!-- Edición de evento (admin) -->
+    <div
+      id="edit-modal"
+      class="modal-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="edit-modal-titulo"
+    >
+      <div class="modal-container">
+        <div class="modal-header">
+          <h3 id="edit-modal-titulo">Editar evento</h3>
+          <button
+            type="button"
+            class="modal-close"
+            id="edit-close"
+            aria-label="Cerrar"
+          >
+            &times;
+          </button>
+        </div>
+        <div class="modal-body">
+          <form id="edit-form">
+            <div class="form-group">
+              <label for="edit-image">Imagen del evento</label>
+              <div class="edit-imagen-actual">
+                <img id="edit-img-actual" alt="Imagen actual del evento" />
+                <p class="plan-hint">
+                  Imagen actual. Si subís otra, la reemplaza (se guarda en
+                  formato 4:5, 1080×1350 px, JPEG).
+                </p>
+              </div>
+              <input
+                type="file"
+                id="edit-image"
+                accept="image/*"
+                class="form-control"
+              />
+              <div id="edit-image-preview-box" class="img-preview-box" hidden>
+                <img
+                  id="edit-image-preview"
+                  class="img-preview"
+                  alt="Vista previa de la nueva imagen"
+                />
+                <div class="img-preview-side">
+                  <div
+                    class="img-modo"
+                    role="radiogroup"
+                    aria-label="Encuadre de la imagen"
+                  >
+                    <label class="img-modo-op"
+                      ><input
+                        type="radio"
+                        name="edit-image-mode"
+                        value="recortar"
+                        checked
+                      />
+                      Recortar para llenar el cuadro</label
+                    >
+                    <label class="img-modo-op"
+                      ><input
+                        type="radio"
+                        name="edit-image-mode"
+                        value="completa"
+                      />
+                      Mostrar la imagen completa</label
+                    >
+                  </div>
+                  <p
+                    id="edit-image-preview-status"
+                    class="plan-hint"
+                    aria-live="polite"
+                  ></p>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="edit-title">Nombre del evento</label>
+              <input type="text" id="edit-title" class="form-control" required />
+            </div>
+
+            <div class="form-group">
+              <label for="edit-desc">Descripción</label>
+              <textarea
+                id="edit-desc"
+                class="form-control"
+                maxlength="300"
+                required
+              ></textarea>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="edit-date">Fecha</label>
+                <input type="date" id="edit-date" class="form-control" required />
+              </div>
+              <div class="form-group">
+                <label for="edit-time">Hora</label>
+                <input type="time" id="edit-time" class="form-control" required />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="edit-place">Lugar</label>
+              <input type="text" id="edit-place" class="form-control" required />
+            </div>
+
+            <div class="form-group">
+              <label for="edit-address">Dirección</label>
+              <input type="text" id="edit-address" class="form-control" required />
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="edit-zone">Zona</label>
+                <select id="edit-zone" class="form-control" required>
+                  <option value="sanrafael">San Rafael, Alvear y Malargüe</option>
+                  <option value="mendoza">Gran Mendoza</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="edit-locality">Localidad</label>
+                <select id="edit-locality" class="form-control" required></select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="edit-price-type">Precio de la entrada</label>
+              <select id="edit-price-type" class="form-control" required>
+                <option value="" disabled selected>Seleccioná una opción</option>
+                <option value="fijo">Precio fijo (ej: $5.000)</option>
+                <option value="desde">Varios precios: desde...</option>
+                <option value="gratuito">Entrada gratuita</option>
+                <option value="colaboracion">A colaboración</option>
+              </select>
+            </div>
+
+            <div class="form-group" id="edit-price-value-group" hidden>
+              <label for="edit-price-value" id="edit-price-value-label"
+                >Valor de la entrada</label
+              >
+              <div class="input-prefix">
+                <span aria-hidden="true">$</span>
+                <input
+                  type="text"
+                  id="edit-price-value"
+                  class="form-control"
+                  inputmode="numeric"
+                  autocomplete="off"
+                  placeholder="5.000"
+                />
+              </div>
+            </div>
+
+            <div class="form-group" id="edit-price-detail-group" hidden>
+              <label for="edit-price-detail">¿Qué se colabora? (opcional)</label>
+              <input
+                type="text"
+                id="edit-price-detail"
+                class="form-control"
+                placeholder="Ej: alimento no perecedero, a la gorra"
+              />
+            </div>
+
+            <fieldset class="entradas-box">
+              <legend>¿Cómo consigue la gente su entrada?</legend>
+              <p class="entradas-aviso">
+                <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+                Se publican junto al evento. Tiene que haber
+                <strong>al menos uno</strong> de los tres.
+              </p>
+              <div class="form-group">
+                <label for="edit-contact"
+                  >Teléfono / WhatsApp
+                  <span class="tag-reco">Recomendado</span></label
+                >
+                <input type="tel" id="edit-contact" class="form-control" />
+              </div>
+              <div class="form-group">
+                <label for="edit-link"
+                  >Link para comprar entradas
+                  <span class="tag-opc">Opcional</span></label
+                >
+                <input
+                  type="text"
+                  id="edit-link"
+                  class="form-control"
+                  inputmode="url"
+                  autocapitalize="none"
+                  autocomplete="off"
+                />
+              </div>
+              <div class="form-group">
+                <label for="edit-redes"
+                  >Instagram para mencionar
+                  <span class="tag-opc">Opcional</span></label
+                >
+                <input
+                  type="text"
+                  id="edit-redes"
+                  class="form-control"
+                  autocapitalize="none"
+                  autocomplete="off"
+                  placeholder="@usuario"
+                />
+              </div>
+              <p id="edit-entradas-error" class="form-error" role="alert" hidden></p>
+            </fieldset>
+
+            <div class="edit-acciones">
+              <button type="button" class="btn btn-outline" id="edit-cancel">
+                Cancelar
+              </button>
+              <button type="submit" class="btn btn-primary" id="edit-save">
+                <i class="fa-solid fa-floppy-disk"></i> Guardar cambios
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
 
     <footer>
       <p>&copy; 2026 Agenda Cultural Cuyo. Todos los derechos reservados.</p>

@@ -1,6 +1,21 @@
 // Lógica de carga, consulta y renderizado de eventos con Firebase Firestore y Storage
 import { db, storage, auth, firebaseConfig } from "./firebase-config.js";
-import { normalizarTelefonoAR, escapeHtml } from "./utils.js";
+import {
+  normalizarTelefonoAR,
+  escapeHtml,
+  PRECIO_TIPOS,
+  MAX_DETALLE_PRECIO,
+  POR_PAGINA,
+  parsearMonto,
+  construirPrecio,
+  formatearPrecioEvento,
+  validarEntradas,
+  urlSegura,
+  paginar,
+  renderPaginacion,
+} from "./utils.js";
+import { procesarImagen4x5, crearControladorImagen } from "./imagen.js";
+import { configurarCamposPrecio, leerPrecio } from "./campos-evento.js";
 import {
   collection,
   doc,
@@ -165,125 +180,19 @@ export function fechaLocalHoy() {
 }
 
 /**
- * Comprime una imagen a WebP (o JPEG si el navegador no soporta WebP).
- * - Lado mayor <= 1280 px y calidad ~0.8.
- * - Usa createImageBitmap y canvas.toBlob.
- * - Si el Blob resultante pesa 2 MB o más, reintenta una vez con lado 1000 px
- *   y calidad 0.7. Si sigue pesando 2 MB o más, lanza un Error claro.
- * - No hay fallback silencioso al archivo original: si la compresión falla,
- *   se lanza un Error y no se sube nada.
- * @param {File} archivo
- * @returns {Promise<Blob>}
- */
-async function comprimirImagen(archivo) {
-  let bitmap;
-  try {
-    bitmap = await createImageBitmap(archivo, {
-      imageOrientation: "from-image",
-    });
-  } catch (e) {
-    console.error("[comprimirImagen] createImageBitmap falló:", e);
-    throw new Error("No se pudo procesar la imagen, probá con otra");
-  }
-
-  const ancho = bitmap.width;
-  const alto = bitmap.height;
-  const ladoMayor = Math.max(ancho, alto);
-
-  const aBlob = (canvas, tipo, calidad) =>
-    new Promise((resolve, reject) => {
-      canvas.toBlob(
-        (blob) =>
-          blob ? resolve(blob) : reject(new Error("toBlob devolvió null")),
-        tipo,
-        calidad,
-      );
-    });
-
-  // Dibuja la imagen escalada y la exporta. Intenta WebP; si el navegador no
-  // lo soporta (devuelve otro tipo), usa JPEG con fondo blanco.
-  const crearBlob = async (maxLado, calidad) => {
-    let w = ancho;
-    let h = alto;
-    if (ladoMayor > maxLado) {
-      const escala = maxLado / ladoMayor;
-      w = Math.round(ancho * escala);
-      h = Math.round(alto * escala);
-    }
-    const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(bitmap, 0, 0, w, h);
-
-    let blob = await aBlob(canvas, "image/webp", calidad);
-    if (blob.type !== "image/webp") {
-      // El JPEG no tiene transparencia: se pinta un fondo blanco detrás.
-      ctx.globalCompositeOperation = "destination-over";
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, w, h);
-      ctx.globalCompositeOperation = "source-over";
-      blob = await aBlob(canvas, "image/jpeg", Math.min(calidad + 0.02, 0.9));
-    }
-    return blob;
-  };
-
-  let blob;
-  try {
-    blob = await crearBlob(1280, 0.8);
-  } catch (e) {
-    console.error("[comprimirImagen] error al comprimir:", e);
-    bitmap.close();
-    throw new Error("No se pudo procesar la imagen, probá con otra");
-  }
-
-  console.log(
-    "[comprimirImagen] original:",
-    archivo.size,
-    "bytes | comprimido:",
-    blob.size,
-    "bytes | tipo:",
-    blob.type,
-  );
-
-  if (blob.size >= 2 * 1024 * 1024) {
-    try {
-      blob = await crearBlob(1000, 0.7);
-    } catch (e) {
-      console.error("[comprimirImagen] error en el reintento:", e);
-      bitmap.close();
-      throw new Error("No se pudo procesar la imagen, probá con otra");
-    }
-    console.log(
-      "[comprimirImagen] reintento | comprimido:",
-      blob.size,
-      "bytes | tipo:",
-      blob.type,
-    );
-    if (blob.size >= 2 * 1024 * 1024) {
-      bitmap.close();
-      throw new Error(
-        "La imagen comprimida sigue superando los 2 MB. Probá con una imagen más pequeña o de menor resolución.",
-      );
-    }
-  }
-
-  bitmap.close();
-  return blob;
-}
-
-/**
  * 1. Función para subir evento:
  * - Exige que haya un usuario de Google autenticado (auth.currentUser).
- * - Valida que la imagen no supere los 15 MB y la sube a Firebase Storage.
- * - Si la imagen pesa 2 MB o más, la comprime (WebP/JPEG) antes de subirla.
- * - Valida que la localidad seleccionada pertenezca a la lista cerrada de la
- *   zona (ubicacion) ANTES de subir la imagen a Storage.
+ * - Valida la localidad (lista cerrada de la zona), la fecha, la hora, la
+ *   descripción, el precio y los datos para conseguir la entrada (al menos uno
+ *   entre teléfono, link de compra e Instagram) ANTES de subir la imagen.
+ * - La imagen siempre se convierte a 4:5 (1080 x 1350 px), JPEG calidad 0.9, y
+ *   se sube a Firebase Storage.
  * - Guarda los datos en la colección 'eventos' en Firestore y crea el registro
  *   del autor en 'autores/{eventoId}' de forma atómica con writeBatch (un único
  *   commit). El documento del evento NO guarda email ni uid.
  * - Campos: nombre, descripcion, fecha, hora, lugar, direccion, localidad,
- *   contacto, imagenUrl, ubicacion, estado ('pendiente'), destacado (false),
+ *   contacto, linkEntradas, redes, precioTipo, precioValor, precioDetalle,
+ *   precio, imagenUrl, ubicacion, estado ('pendiente'), destacado (false),
  *   plan ('gratuito' | 'destacado' | 'premium'), fechaCreacion.
  */
 export async function subirEvento({
@@ -295,8 +204,15 @@ export async function subirEvento({
   direccion,
   localidad,
   contacto,
+  linkEntradas,
+  redes,
+  precioTipo,
+  precioValor,
+  precioDetalle,
   ubicacion,
   imagenArchivo,
+  imagenProcesada,
+  modoImagen,
   plan,
 }) {
   // Exigir usuario autenticado
@@ -307,7 +223,7 @@ export async function subirEvento({
     );
   }
 
-  if (!imagenArchivo) {
+  if (!imagenArchivo && !imagenProcesada) {
     throw new Error("Debe seleccionar una imagen para el evento.");
   }
 
@@ -358,34 +274,56 @@ export async function subirEvento({
     );
   }
 
+  // Precio de la entrada
+  if (!Object.prototype.hasOwnProperty.call(PRECIO_TIPOS, precioTipo)) {
+    throw new Error("Elegí el precio de la entrada (puede ser gratuita).");
+  }
+  let valorPrecio = null;
+  if (precioTipo === "fijo" || precioTipo === "desde") {
+    valorPrecio = parsearMonto(precioValor);
+    if (!valorPrecio) {
+      throw new Error("Ingresá el valor de la entrada en pesos. Ejemplo: 5.000");
+    }
+  }
+  const detallePrecio =
+    precioTipo === "colaboracion"
+      ? String(precioDetalle || "").trim().slice(0, MAX_DETALLE_PRECIO)
+      : "";
+  const precioTexto = construirPrecio({
+    tipo: precioTipo,
+    valor: valorPrecio,
+    detalle: detallePrecio,
+  });
+
+  // Datos para conseguir la entrada: alcanza con que haya uno
+  const entradas = validarEntradas({ contacto, linkEntradas, redes });
+  if (!entradas.ok) {
+    throw new Error(entradas.error);
+  }
+
   const MAX_SIZE_MB = 15;
   const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
-  if (imagenArchivo.size > MAX_SIZE_BYTES) {
+  if (imagenArchivo && imagenArchivo.size > MAX_SIZE_BYTES) {
     const tamanoMB = (imagenArchivo.size / (1024 * 1024)).toFixed(2);
     throw new Error(
       `La imagen supera el límite de ${MAX_SIZE_MB} MB (tamaño: ${tamanoMB} MB). Elija una imagen más liviana.`,
     );
   }
 
-  // Subir imagen a Storage.
-  // Si el original pesa 2 MB o más, se comprime antes de subir; si pesa menos,
-  // se sube el original sin comprimir. Nunca se sube el original sin comprimir
-  // cuando supera los 2 MB.
-  const MAX_COMPRIMIR_BYTES = 2 * 1024 * 1024;
-  let archivoSubir = imagenArchivo;
-  let nombreLimpio = imagenArchivo.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  // Imagen: siempre 4:5, 1080 x 1350, JPEG calidad 0.9 (si falla el
+  // procesado se lanza un Error y no se sube nada).
+  const blobImagen =
+    imagenProcesada ||
+    (await procesarImagen4x5(imagenArchivo, modoImagen || "recortar"));
+  const nombreBase =
+    (imagenArchivo ? imagenArchivo.name : "evento")
+      .replace(/\.[^/.]+$/, "")
+      .replace(/[^a-zA-Z0-9._-]/g, "_")
+      .slice(0, 60) || "evento";
 
-  if (imagenArchivo.size >= MAX_COMPRIMIR_BYTES) {
-    const blobComprimido = await comprimirImagen(imagenArchivo);
-    const ext = blobComprimido.type === "image/webp" ? ".webp" : ".jpg";
-    const nombreBase = nombreLimpio.replace(/\.[^/.]+$/, "");
-    nombreLimpio = `${nombreBase}${ext}`;
-    archivoSubir = blobComprimido;
-  }
-
-  const storageRef = ref(storage, `eventos/${Date.now()}_${nombreLimpio}`);
-  const snapshot = await uploadBytes(storageRef, archivoSubir, {
-    contentType: archivoSubir.type,
+  const storageRef = ref(storage, `eventos/${Date.now()}_${nombreBase}.jpg`);
+  const snapshot = await uploadBytes(storageRef, blobImagen, {
+    contentType: "image/jpeg",
     cacheControl: "public,max-age=31536000,immutable",
   });
   const imagenUrl = await getDownloadURL(snapshot.ref);
@@ -400,7 +338,13 @@ export async function subirEvento({
     lugar,
     direccion,
     localidad,
-    contacto,
+    contacto: entradas.contacto,
+    linkEntradas: entradas.linkEntradas,
+    redes: entradas.redes,
+    precioTipo,
+    precioValor: valorPrecio,
+    precioDetalle: detallePrecio,
+    precio: precioTexto,
     imagenUrl,
     ubicacion, // 'sanrafael' o 'mendoza'
     estado: "pendiente",
@@ -758,16 +702,58 @@ export async function consultarEventosPublicos(ubicacion) {
   }
 }
 
+const IMAGEN_POR_DEFECTO =
+  "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=600&q=80";
+
+const VACIO_POR_FILTRO = {
+  hoy: "para hoy",
+  manana: "para mañana",
+  semana: "para esta semana",
+};
+
+/** URL que lleva directo a un evento dentro de la página de la zona. */
+export function urlEvento(id) {
+  const base = window.location.href.split(/[?#]/)[0];
+  return `${base}?evento=${encodeURIComponent(id)}`;
+}
+
+/** Texto que acompaña al enlace cuando se comparte un evento. */
+export function textoCompartir(ev) {
+  const lineas = [`📅 ${ev.nombre || "Evento"}`];
+  const cuando = [formatearFecha(ev.fecha), ev.hora ? `${ev.hora}hs` : ""]
+    .filter(Boolean)
+    .join(" - ");
+  if (cuando) lineas.push(`🗓 ${cuando}`);
+  const donde = [ev.lugar, ev.localidad].filter(Boolean).join(", ");
+  if (donde) lineas.push(`📍 ${donde}`);
+  const precio = formatearPrecioEvento(ev);
+  if (precio) lineas.push(`🎟 ${precio}`);
+  lineas.push("", "Más eventos en la Agenda Cultural:");
+  return lineas.join("\n");
+}
+
 /**
  * Renderiza dinámicamente las tarjetas de eventos en el contenedor dado.
+ * @param {object[]} eventos
+ * @param {HTMLElement} contenedor
+ * @param {{filtro?: string}} [opciones]
  */
-/**
- * Renderiza dinámicamente las tarjetas de eventos en el contenedor dado.
- */
-export function renderizarTarjetas(eventos, contenedor) {
+export function renderizarTarjetas(eventos, contenedor, opciones = {}) {
   if (!contenedor) return;
 
   if (!eventos || eventos.length === 0) {
+    const filtro = opciones.filtro;
+    if (filtro && filtro !== "todos") {
+      contenedor.innerHTML = `
+        <div class="no-events">
+          <i class="fa-solid fa-calendar-xmark" style="font-size: 2.5rem; margin-bottom: 1rem; color: var(--text-muted);"></i>
+          <h3>No hay eventos ${VACIO_POR_FILTRO[filtro] || "en este período"}</h3>
+          <p style="margin-bottom: 1rem;">Probá con otro filtro o mirá toda la cartelera.</p>
+          <button type="button" class="btn btn-outline btn-sm" data-filtro-reset="todos">Ver todos los eventos</button>
+        </div>
+      `;
+      return;
+    }
     contenedor.innerHTML = `
       <div class="no-events">
         <i class="fa-solid fa-calendar-xmark" style="font-size: 2.5rem; margin-bottom: 1rem; color: var(--text-muted);"></i>
@@ -784,29 +770,31 @@ export function renderizarTarjetas(eventos, contenedor) {
       const fechaFormateada = formatearFecha(ev.fecha);
       const nombre = ev.nombre || "Sin título";
       const descripcion = ev.descripcion || "";
-      const IMAGEN_POR_DEFECTO =
-        "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=600&q=80";
       const imagen =
         ev.imagenUrl && ev.imagenUrl.startsWith("https://")
           ? ev.imagenUrl
           : IMAGEN_POR_DEFECTO;
       const esLarga = descripcion.length > (window.DESCRIPCION_CORTA || 120);
+      const precio = formatearPrecioEvento(ev);
+      const linkEntradas = urlSegura(ev.linkEntradas);
+      const idAttr = escapeHtml(ev.id);
 
-      const htmlLugar = obtenerHtmlLugar(ev);
-      const htmlContacto = obtenerHtmlContacto(ev);
+      const textoComp = textoCompartir(ev);
+      const urlComp = urlEvento(ev.id);
+      const urlWaComp = `https://wa.me/?text=${encodeURIComponent(`${textoComp}\n${urlComp}`)}`;
 
       return `
-        <article class="event-card ${esDestacado ? "featured" : ""}">
+        <article class="event-card ${esDestacado ? "featured" : ""}" id="evento-${idAttr}" data-id="${idAttr}">
           ${
             esDestacado
               ? '<span class="featured-badge"><i class="fa-solid fa-star"></i> Destacado</span>'
               : ""
           }
-          <img src="${imagen}" alt="${escapeHtml(nombre)}" class="event-img" loading="lazy">
+          <img src="${escapeHtml(imagen)}" alt="${escapeHtml(nombre)}" class="event-img" loading="lazy">
           <div class="event-body">
             <span class="event-date-badge">
               <i class="fa-regular fa-calendar"></i>
-              <time datetime="${ev.fecha || ""}">${escapeHtml(fechaFormateada)}</time> - ${escapeHtml(ev.hora || "")}hs
+              <time datetime="${escapeHtml(ev.fecha || "")}">${escapeHtml(fechaFormateada)}</time> - ${escapeHtml(ev.hora || "")}hs
             </span>
             <h3 class="event-title">${escapeHtml(nombre)}</h3>
             <p class="event-desc${esLarga ? " collapsed" : ""}">${escapeHtml(descripcion)}</p>
@@ -818,7 +806,7 @@ export function renderizarTarjetas(eventos, contenedor) {
             <div class="event-details">
               <div>
                 <i class="fa-solid fa-location-dot"></i>
-                <strong>Lugar:</strong> ${htmlLugar}
+                <strong>Lugar:</strong> ${obtenerHtmlLugar(ev)}
               </div>
               ${
                 ev.localidad
@@ -829,10 +817,31 @@ export function renderizarTarjetas(eventos, contenedor) {
               </div>`
                   : ""
               }
-              <div>
-                <i class="fa-solid fa-phone"></i>
-                <strong>Contacto:</strong> ${htmlContacto}
-              </div>
+              ${
+                precio
+                  ? `
+              <div class="event-precio">
+                <i class="fa-solid fa-ticket"></i>
+                <strong>Entrada:</strong> ${escapeHtml(precio)}
+              </div>`
+                  : ""
+              }
+              ${obtenerHtmlContacto(ev)}
+              ${obtenerHtmlRedes(ev)}
+            </div>
+            <div class="event-actions">
+              ${
+                linkEntradas
+                  ? `<a class="btn btn-primary btn-entradas" href="${escapeHtml(linkEntradas)}" target="_blank" rel="noopener noreferrer nofollow ugc"><i class="fa-solid fa-ticket"></i> Conseguir entradas</a>`
+                  : ""
+              }
+              <button type="button" class="btn btn-outline btn-compartir" data-id="${idAttr}" aria-label="Compartir ${escapeHtml(nombre)}" aria-expanded="false">
+                <i class="fa-solid fa-share-nodes"></i> Compartir
+              </button>
+            </div>
+            <div class="share-menu" hidden>
+              <a class="share-opcion" href="${escapeHtml(urlWaComp)}" target="_blank" rel="noopener noreferrer"><i class="fa-brands fa-whatsapp"></i> WhatsApp</a>
+              <button type="button" class="share-opcion btn-copiar" data-url="${escapeHtml(urlComp)}"><i class="fa-regular fa-copy"></i> Copiar enlace</button>
             </div>
           </div>
         </article>
@@ -852,34 +861,52 @@ function obtenerHtmlLugar(ev) {
   const textoLugar = partes.join(" ");
   if (!textoLugar) return "A confirmar";
 
-  const urlMaps =
-    typeof construirUrlMaps === "function" ? construirUrlMaps(ev) : null;
-
-  if (urlMaps) {
-    return `<a href="${urlMaps}" target="_blank" rel="noopener noreferrer" aria-label="Ver en Google Maps">${escapeHtml(textoLugar)}</a>`;
-  }
-  return escapeHtml(textoLugar);
+  const urlMaps = construirUrlMaps(ev);
+  return `<a href="${escapeHtml(urlMaps)}" target="_blank" rel="noopener noreferrer" aria-label="Ver en Google Maps">${escapeHtml(textoLugar)}</a>`;
 }
 
 /**
- * Genera el HTML para el contacto con enlace a WhatsApp si aplica.
+ * Genera la fila de contacto (con enlace a WhatsApp si es un móvil válido).
+ * Si el evento no tiene teléfono no se muestra la fila.
  */
 function obtenerHtmlContacto(ev) {
-  if (!ev.contacto) return "No especificado";
+  if (!ev.contacto) return "";
 
-  const numLimpio =
-    typeof normalizarTelefonoAR === "function"
-      ? normalizarTelefonoAR(ev.contacto)
-      : null;
-
+  const numLimpio = normalizarTelefonoAR(ev.contacto);
+  let valor;
   if (numLimpio) {
     const nombreEvento = ev.nombre || "el evento";
     const mensaje = `Hola, me comunico desde la Agenda Cultural por el evento "${nombreEvento}", quisiera más información.`;
     const urlWa = `https://wa.me/${numLimpio}?text=${encodeURIComponent(mensaje)}`;
-    return `<a href="${urlWa}" target="_blank" rel="noopener noreferrer" aria-label="Escribir por WhatsApp">${escapeHtml(ev.contacto)}</a>`;
+    valor = `<a href="${escapeHtml(urlWa)}" target="_blank" rel="noopener noreferrer" aria-label="Escribir por WhatsApp">${escapeHtml(ev.contacto)}</a>`;
+  } else {
+    valor = escapeHtml(ev.contacto);
   }
+  return `
+              <div>
+                <i class="fa-solid fa-phone"></i>
+                <strong>Contacto:</strong> ${valor}
+              </div>`;
+}
 
-  return escapeHtml(ev.contacto);
+/** Fila con los usuarios de Instagram del evento (enlaces al perfil). */
+function obtenerHtmlRedes(ev) {
+  const usuarios = String(ev.redes || "")
+    .split(/\s+/)
+    .map((u) => u.replace(/^@/, ""))
+    .filter((u) => /^[A-Za-z0-9._]{1,30}$/.test(u));
+  if (usuarios.length === 0) return "";
+  const enlaces = usuarios
+    .map(
+      (u) =>
+        `<a href="https://www.instagram.com/${encodeURIComponent(u)}/" target="_blank" rel="noopener noreferrer nofollow ugc">@${escapeHtml(u)}</a>`,
+    )
+    .join(" ");
+  return `
+              <div>
+                <i class="fa-brands fa-instagram"></i>
+                <strong>Instagram:</strong> ${enlaces}
+              </div>`;
 }
 
 function formatearFecha(fechaStr) {
@@ -976,8 +1003,39 @@ export function poblarSelectLocalidades(zona, select) {
 }
 
 /**
+ * Devuelve el domingo de la semana actual en formato "AAAA-MM-DD".
+ * "Esta semana" = desde hoy hasta ese domingo (inclusive).
+ */
+export function fechaFinDeSemana() {
+  const faltan = (7 - new Date().getDay()) % 7; // 0 = domingo
+  return fechaLocalMasDias(faltan);
+}
+
+/**
+ * Filtra los eventos por rango de fechas: "todos" | "hoy" | "manana" | "semana".
+ */
+export function filtrarEventosPorFecha(eventos, filtro) {
+  const hoy = fechaLocalHoy();
+  switch (filtro) {
+    case "hoy":
+      return eventos.filter((ev) => ev.fecha === hoy);
+    case "manana": {
+      const manana = fechaLocalMasDias(1);
+      return eventos.filter((ev) => ev.fecha === manana);
+    }
+    case "semana": {
+      const fin = fechaFinDeSemana();
+      return eventos.filter((ev) => ev.fecha >= hoy && ev.fecha <= fin);
+    }
+    default:
+      return eventos;
+  }
+}
+
+/**
  * 3. Inicialización en el ciclo de vida del DOM:
  * - Carga y renderiza eventos para la página actual (sanrafael / mendoza)
+ *   con filtros (todos / hoy / mañana / esta semana) y paginación de 15
  * - Carga el listado de localidades según la zona de la página
  * - Gestiona el modal de carga y el envío del formulario con subirEvento()
  */
@@ -986,12 +1044,87 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (!ubicacionActual) return;
 
   const eventsGrid = document.getElementById("events-grid");
+  const contenedorPaginacion = document.getElementById("events-pagination");
+  const barraFiltros = document.getElementById("filtros-eventos");
+  const chips = barraFiltros
+    ? Array.from(barraFiltros.querySelectorAll("[data-filtro]"))
+    : [];
 
   // Cargar las localidades de la zona en el formulario de carga de eventos.
   poblarSelectLocalidades(
     ubicacionActual,
     document.getElementById("event-locality"),
   );
+
+  // Estado de la vista pública
+  let eventosTodos = [];
+  let filtroActual = "todos";
+  let paginaActual = 1;
+
+  function irAlInicioDelListado() {
+    const destino = barraFiltros || eventsGrid;
+    if (!destino) return;
+    const reducido = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    destino.scrollIntoView({ behavior: reducido ? "auto" : "smooth", block: "start" });
+  }
+
+  function actualizarChips(cargado) {
+    chips.forEach((chip) => {
+      const activo = chip.dataset.filtro === filtroActual;
+      chip.classList.toggle("activo", activo);
+      chip.setAttribute("aria-pressed", String(activo));
+      const cuenta = chip.querySelector(".chip-count");
+      if (cuenta) {
+        cuenta.textContent = cargado
+          ? String(filtrarEventosPorFecha(eventosTodos, chip.dataset.filtro).length)
+          : "";
+      }
+    });
+  }
+
+  function renderizarVista() {
+    const filtrados = filtrarEventosPorFecha(eventosTodos, filtroActual);
+    const { items, pagina } = paginar(filtrados, paginaActual, POR_PAGINA);
+    paginaActual = pagina;
+    actualizarChips(true);
+    renderizarTarjetas(items, eventsGrid, { filtro: filtroActual });
+    renderPaginacion(contenedorPaginacion, {
+      total: filtrados.length,
+      pagina,
+      porPagina: POR_PAGINA,
+      onCambiar: (nueva) => {
+        paginaActual = nueva;
+        renderizarVista();
+        irAlInicioDelListado();
+      },
+    });
+  }
+
+  function cambiarFiltro(filtro) {
+    filtroActual = filtro;
+    paginaActual = 1;
+    renderizarVista();
+  }
+
+  chips.forEach((chip) =>
+    chip.addEventListener("click", () => cambiarFiltro(chip.dataset.filtro)),
+  );
+
+  // Si se llegó con un enlace compartido (?evento=ID), mostrar ese evento.
+  function mostrarEventoCompartido() {
+    const id = new URLSearchParams(window.location.search).get("evento");
+    if (!id) return;
+    const indice = eventosTodos.findIndex((ev) => ev.id === id);
+    if (indice === -1) return;
+    filtroActual = "todos";
+    paginaActual = Math.floor(indice / POR_PAGINA) + 1;
+    renderizarVista();
+    const tarjeta = document.getElementById(`evento-${id}`);
+    if (!tarjeta) return;
+    tarjeta.classList.add("evento-compartido");
+    tarjeta.scrollIntoView({ behavior: "auto", block: "center" });
+    setTimeout(() => tarjeta.classList.remove("evento-compartido"), 3500);
+  }
 
   async function cargarEventos() {
     if (eventsGrid) {
@@ -1004,8 +1137,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     try {
-      const eventos = await consultarEventosPublicos(ubicacionActual);
-      renderizarTarjetas(eventos, eventsGrid);
+      eventosTodos = await consultarEventosPublicos(ubicacionActual);
+      renderizarVista();
+      mostrarEventoCompartido();
     } catch (err) {
       console.error("Error al cargar eventos:", err);
       if (eventsGrid) {
@@ -1028,19 +1162,71 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Los eventos se cargan en segundo plano, sin bloquear el resto de la página.
   cargarEventos();
 
-  // Listener delegado para "Ver más" / "Ver menos" de descripciones largas
-
+  // Acciones delegadas dentro del listado: "Ver más", compartir, copiar enlace
+  // y "Ver todos los eventos" (cuando un filtro no tiene resultados).
   if (eventsGrid) {
-    eventsGrid.addEventListener("click", (e) => {
-      const btn = e.target.closest(".event-more");
-      if (!btn) return;
-      const card = btn.closest(".event-card");
-      const desc = card ? card.querySelector(".event-desc") : null;
-      if (!desc) return;
-      const expanded = btn.getAttribute("aria-expanded") === "true";
-      desc.classList.toggle("collapsed");
-      btn.setAttribute("aria-expanded", String(!expanded));
-      btn.textContent = !expanded ? "Ver menos" : "Ver más";
+    eventsGrid.addEventListener("click", async (e) => {
+      const reset = e.target.closest("[data-filtro-reset]");
+      if (reset) {
+        cambiarFiltro(reset.dataset.filtroReset);
+        return;
+      }
+
+      const btnMas = e.target.closest(".event-more");
+      if (btnMas) {
+        const card = btnMas.closest(".event-card");
+        const desc = card ? card.querySelector(".event-desc") : null;
+        if (!desc) return;
+        const expanded = btnMas.getAttribute("aria-expanded") === "true";
+        desc.classList.toggle("collapsed");
+        btnMas.setAttribute("aria-expanded", String(!expanded));
+        btnMas.textContent = !expanded ? "Ver menos" : "Ver más";
+        return;
+      }
+
+      const btnCompartir = e.target.closest(".btn-compartir");
+      if (btnCompartir) {
+        const ev = eventosTodos.find((x) => x.id === btnCompartir.dataset.id);
+        if (!ev) return;
+        if (navigator.share) {
+          try {
+            await navigator.share({
+              title: ev.nombre || "Evento",
+              text: textoCompartir(ev),
+              url: urlEvento(ev.id),
+            });
+          } catch (err) {
+            // AbortError = la persona cerró el panel de compartir; no es un error.
+            if (err && err.name !== "AbortError") {
+              console.warn("[compartir] No se pudo compartir:", err);
+            }
+          }
+          return;
+        }
+        // Sin Web Share API (escritorio): se despliega el menú con opciones.
+        const menu = btnCompartir.closest(".event-body").querySelector(".share-menu");
+        if (menu) {
+          const abrir = menu.hidden;
+          menu.hidden = !abrir;
+          btnCompartir.setAttribute("aria-expanded", String(abrir));
+        }
+        return;
+      }
+
+      const btnCopiar = e.target.closest(".btn-copiar");
+      if (btnCopiar) {
+        const url = btnCopiar.dataset.url;
+        const original = btnCopiar.innerHTML;
+        try {
+          await navigator.clipboard.writeText(url);
+          btnCopiar.innerHTML = '<i class="fa-solid fa-check"></i> ¡Enlace copiado!';
+          setTimeout(() => {
+            btnCopiar.innerHTML = original;
+          }, 2000);
+        } catch (_) {
+          window.prompt("Copiá el enlace del evento:", url);
+        }
+      }
     });
   }
 
@@ -1084,8 +1270,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  // Al abrir el modal, refrescar el min de fecha (por si pasó la medianoche)
-
   // Contador en vivo de la descripción
   const descTextarea = document.getElementById("event-desc");
   if (descTextarea) {
@@ -1109,6 +1293,43 @@ document.addEventListener("DOMContentLoaded", async () => {
     actualizarContadorDesc();
   }
 
+  // Imagen: vista previa 4:5 y encuadre (recortar / mostrar completa)
+  const inputImagen = document.getElementById("event-image");
+  const controladorImagen = inputImagen
+    ? crearControladorImagen({
+        input: inputImagen,
+        caja: document.getElementById("image-preview-box"),
+        img: document.getElementById("image-preview"),
+        radios: Array.from(document.querySelectorAll('input[name="image-mode"]')),
+        estado: document.getElementById("image-preview-status"),
+      })
+    : null;
+
+  // Precio de la entrada
+  const precioEls = {
+    tipo: document.getElementById("event-price-type"),
+    grupoValor: document.getElementById("price-value-group"),
+    valor: document.getElementById("event-price-value"),
+    etiquetaValor: document.getElementById("price-value-label"),
+    grupoDetalle: document.getElementById("price-detail-group"),
+    detalle: document.getElementById("event-price-detail"),
+  };
+  const controladorPrecio = precioEls.tipo
+    ? configurarCamposPrecio(precioEls)
+    : null;
+
+  // Error visible de "al menos un dato para conseguir la entrada"
+  const avisoEntradas = document.getElementById("entradas-error");
+  function mostrarErrorEntradas(mensaje) {
+    if (!avisoEntradas) return;
+    avisoEntradas.textContent = mensaje || "";
+    avisoEntradas.hidden = !mensaje;
+  }
+  ["event-contact", "event-link", "event-redes"].forEach((id) => {
+    const campo = document.getElementById(id);
+    if (campo) campo.addEventListener("input", () => mostrarErrorEntradas(""));
+  });
+
   // Manejo del formulario de carga
   const eventForm = document.getElementById("event-form");
   if (eventForm) {
@@ -1128,8 +1349,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         return;
       }
 
-      const imageInput = document.getElementById("event-image");
-      const imagenArchivo = imageInput ? imageInput.files[0] : null;
+      const imagenArchivo = controladorImagen
+        ? controladorImagen.getArchivo()
+        : null;
 
       if (!imagenArchivo) {
         alert("Por favor selecciona una imagen para el evento.");
@@ -1155,6 +1377,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       const selectLocalidad = document.getElementById("event-locality");
       const localidad = selectLocalidad ? selectLocalidad.value : "";
       const contacto = document.getElementById("event-contact").value.trim();
+      const linkEntradas = document.getElementById("event-link").value.trim();
+      const redes = document.getElementById("event-redes").value.trim();
 
       const btnSubmit = eventForm.querySelector('button[type="submit"]');
       const originalBtnText = btnSubmit ? btnSubmit.innerHTML : "Enviar Evento";
@@ -1180,11 +1404,28 @@ document.addEventListener("DOMContentLoaded", async () => {
       // Validación de hora: minutos 00, 15, 30 o 45
       const HORA_REGEX = /^([01]\d|2[0-3]):(00|15|30|45)$/;
       if (hora && !HORA_REGEX.test(hora)) {
-        btnSubmit.disabled = false;
-        btnSubmit.innerHTML = originalBtnText;
         alert("Elegí la hora y los minutos del evento.");
         return;
       }
+
+      // Precio de la entrada
+      const precio = leerPrecio(precioEls);
+      if (!precio.ok) {
+        alert(precio.error);
+        precioEls.tipo.focus();
+        return;
+      }
+
+      // Al menos un dato para conseguir la entrada (teléfono, link o Instagram)
+      const entradas = validarEntradas({ contacto, linkEntradas, redes });
+      if (!entradas.ok) {
+        mostrarErrorEntradas(entradas.error);
+        if (avisoEntradas) {
+          avisoEntradas.scrollIntoView({ block: "center" });
+        }
+        return;
+      }
+      mostrarErrorEntradas("");
 
       // Planes pagos: al terminar de guardar se abre WhatsApp. Se abre una pestaña
       // en blanco AHORA (dentro del toque del usuario) porque los celulares
@@ -1216,6 +1457,8 @@ document.addEventListener("DOMContentLoaded", async () => {
           btnSubmit.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Subiendo imagen y guardando...`;
         }
 
+        const imagenProcesada = await controladorImagen.getBlob();
+
         await subirEvento({
           nombre,
           descripcion,
@@ -1224,13 +1467,22 @@ document.addEventListener("DOMContentLoaded", async () => {
           lugar,
           direccion,
           localidad,
-          contacto,
+          contacto: entradas.contacto,
+          linkEntradas: entradas.linkEntradas,
+          redes: entradas.redes,
+          precioTipo: precio.precioTipo,
+          precioValor: precio.precioValor,
+          precioDetalle: precio.precioDetalle,
           ubicacion: ubicacionActual,
           imagenArchivo,
+          imagenProcesada,
+          modoImagen: controladorImagen.getModo(),
           plan: planEnvio.id,
         });
 
         eventForm.reset();
+        if (controladorImagen) controladorImagen.reset();
+        if (controladorPrecio) controladorPrecio.actualizar();
         const campoDesc = document.getElementById("event-desc");
         if (campoDesc) campoDesc.dispatchEvent(new Event("input"));
 
