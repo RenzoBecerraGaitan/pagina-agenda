@@ -1,5 +1,5 @@
 // Lógica de carga, consulta y renderizado de eventos con Firebase Firestore y Storage
-import { db, storage, auth, firebaseConfig } from "./firebase-config.js";
+import { db, storage, auth, firebaseConfig } from "./firebase-config.js?v=202610251319";
 import {
   normalizarTelefonoAR,
   escapeHtml,
@@ -13,9 +13,13 @@ import {
   urlSegura,
   paginar,
   renderPaginacion,
-} from "./utils.js";
-import { procesarImagen4x5, crearControladorImagen } from "./imagen.js";
-import { configurarCamposPrecio, leerPrecio } from "./campos-evento.js";
+} from "./utils.js?v=202610251319";
+import { procesarImagen4x5, crearControladorImagen } from "./imagen.js?v=202610251319";
+import {
+  configurarCamposPrecio,
+  leerPrecio,
+  limpiarPrecio,
+} from "./campos-evento.js?v=202610251319";
 import {
   collection,
   doc,
@@ -286,9 +290,14 @@ export async function subirEvento({
     }
   }
   const detallePrecio =
-    precioTipo === "colaboracion"
+    precioTipo === "otro" || precioTipo === "colaboracion"
       ? String(precioDetalle || "").trim().slice(0, MAX_DETALLE_PRECIO)
       : "";
+  if (precioTipo === "otro" && !detallePrecio) {
+    throw new Error(
+      "Escribí qué precio tiene el evento. Ejemplo: alimento no perecedero, a la gorra.",
+    );
+  }
   const precioTexto = construirPrecio({
     tipo: precioTipo,
     valor: valorPrecio,
@@ -1307,14 +1316,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Precio de la entrada
   const precioEls = {
-    tipo: document.getElementById("event-price-type"),
+    tipos: Array.from(document.querySelectorAll('input[name="event-price-type"]')),
     grupoValor: document.getElementById("price-value-group"),
     valor: document.getElementById("event-price-value"),
     etiquetaValor: document.getElementById("price-value-label"),
     grupoDetalle: document.getElementById("price-detail-group"),
     detalle: document.getElementById("event-price-detail"),
   };
-  const controladorPrecio = precioEls.tipo
+  const controladorPrecio = precioEls.tipos.length
     ? configurarCamposPrecio(precioEls)
     : null;
 
@@ -1412,7 +1421,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       const precio = leerPrecio(precioEls);
       if (!precio.ok) {
         alert(precio.error);
-        precioEls.tipo.focus();
+        const destino = precioEls.tipos.find((r) => r.checked) || precioEls.tipos[0];
+        if (destino) destino.focus();
         return;
       }
 
@@ -1482,7 +1492,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         eventForm.reset();
         if (controladorImagen) controladorImagen.reset();
-        if (controladorPrecio) controladorPrecio.actualizar();
+        limpiarPrecio(precioEls, controladorPrecio);
         const campoDesc = document.getElementById("event-desc");
         if (campoDesc) campoDesc.dispatchEvent(new Event("input"));
 

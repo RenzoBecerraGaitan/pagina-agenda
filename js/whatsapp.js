@@ -1,6 +1,6 @@
 // Enlaces de WhatsApp configurables desde Firestore (documento config/whatsapp).
 // Solo se aceptan URLs de invitación de grupo (chat.whatsapp.com) o wa.me.
-import { db } from "./firebase-config.js";
+import { db } from "./firebase-config.js?v=202610251319";
 import {
   doc,
   getDoc,

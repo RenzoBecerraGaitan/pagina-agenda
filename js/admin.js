@@ -1,12 +1,12 @@
 // Panel de Control y Administración de Eventos (/admin)
-import { app, db, storage, auth, firebaseConfig } from "./firebase-config.js";
-import { googleProvider } from "./auth.js";
+import { app, db, storage, auth, firebaseConfig } from "./firebase-config.js?v=202610251319";
+import { googleProvider } from "./auth.js?v=202610251319";
 import {
   fechaLocalHoy,
   LOCALIDADES_POR_ZONA,
   poblarSelectLocalidades,
   MAX_DESCRIPCION,
-} from "./eventos.js";
+} from "./eventos.js?v=202610251319";
 import {
   normalizarTelefonoAR,
   formatearPrecioEvento,
@@ -15,13 +15,14 @@ import {
   paginar,
   renderPaginacion,
   POR_PAGINA,
-} from "./utils.js";
-import { crearControladorImagen } from "./imagen.js";
+} from "./utils.js?v=202610251319";
+import { crearControladorImagen } from "./imagen.js?v=202610251319";
 import {
   configurarCamposPrecio,
   leerPrecio,
   fijarPrecio,
-} from "./campos-evento.js";
+  limpiarPrecio,
+} from "./campos-evento.js?v=202610251319";
 import {
   signInWithPopup,
   signOut,
@@ -789,7 +790,7 @@ function elEdit(id) {
 
 function precioEditEls() {
   return {
-    tipo: elEdit("edit-price-type"),
+    tipos: Array.from(document.querySelectorAll('input[name="edit-price-type"]')),
     grupoValor: elEdit("edit-price-value-group"),
     valor: elEdit("edit-price-value"),
     etiquetaValor: elEdit("edit-price-value-label"),
@@ -900,7 +901,8 @@ async function guardarEdicion(e) {
   const precio = leerPrecio(precioEditEls());
   if (!precio.ok) {
     alert(precio.error);
-    elEdit("edit-price-type").focus();
+    const destinoPrecio = precioEditEls().tipos[0];
+    if (destinoPrecio) destinoPrecio.focus();
     return;
   }
 

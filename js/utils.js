@@ -61,6 +61,8 @@ export const PRECIO_TIPOS = {
   fijo: "Precio fijo",
   desde: "Varios precios (desde...)",
   gratuito: "Entrada gratuita",
+  otro: "Otro",
+  // Eventos cargados antes de existir "Otro" (se muestran igual, ya no se ofrece)
   colaboracion: "A colaboración",
 };
 
@@ -102,6 +104,11 @@ export function construirPrecio({ tipo, valor, detalle } = {}) {
       return valor ? `Desde ${formatearMonto(valor)}` : "";
     case "gratuito":
       return "Entrada gratuita";
+    case "otro": {
+      // Texto libre escrito por quien carga el evento: "Alimento no perecedero",
+      // "A la gorra", "A colaboración", etc.
+      return String(detalle || "").trim();
+    }
     case "colaboracion": {
       const d = String(detalle || "").trim();
       return d ? `A colaboración: ${d}` : "A colaboración";

@@ -1,27 +1,35 @@
 // Campos de precio del formulario de eventos (carga pública y edición del admin).
-import { parsearMonto, MAX_DETALLE_PRECIO, construirPrecio } from "./utils.js";
+import { parsearMonto, MAX_DETALLE_PRECIO, construirPrecio } from "./utils.js?v=202610251319";
+
+function tipoElegido(el) {
+  const marcado = el.tipos.find((r) => r.checked);
+  return marcado ? marcado.value : "";
+}
 
 /**
- * Muestra/oculta el valor y el detalle según el tipo de precio elegido y
- * formatea el monto mientras se escribe ("5000" -> "5.000").
- * @param {{tipo: HTMLSelectElement, grupoValor: HTMLElement, valor: HTMLInputElement,
+ * Opciones de precio como botones visibles (radios): fijo, desde, gratuita y
+ * otro. Muestra el campo que corresponde a cada una y formatea el monto
+ * mientras se escribe ("5000" -> "5.000").
+ * @param {{tipos: HTMLInputElement[], grupoValor: HTMLElement, valor: HTMLInputElement,
  *          etiquetaValor?: HTMLElement, grupoDetalle: HTMLElement, detalle: HTMLInputElement}} el
  */
 export function configurarCamposPrecio(el) {
   function actualizar() {
-    const t = el.tipo.value;
+    const t = tipoElegido(el);
     const pideValor = t === "fijo" || t === "desde";
+    const pideDetalle = t === "otro";
     el.grupoValor.hidden = !pideValor;
     el.valor.required = pideValor;
-    el.grupoDetalle.hidden = t !== "colaboracion";
+    el.grupoDetalle.hidden = !pideDetalle;
+    el.detalle.required = pideDetalle;
     if (el.etiquetaValor) {
       el.etiquetaValor.textContent =
         t === "desde"
-          ? "Precio más bajo (desde cuánto)"
-          : "Valor de la entrada";
+          ? "¿Desde cuánto? (el precio más bajo)"
+          : "¿Cuánto cuesta la entrada?";
     }
   }
-  el.tipo.addEventListener("change", actualizar);
+  el.tipos.forEach((r) => r.addEventListener("change", actualizar));
   el.valor.addEventListener("input", () => {
     const digitos = el.valor.value.replace(/\D/g, "").slice(0, 8);
     el.valor.value = digitos ? Number(digitos).toLocaleString("es-AR") : "";
@@ -37,7 +45,7 @@ export function configurarCamposPrecio(el) {
  *            precioValor?: number|null, precioDetalle?: string, precio?: string}}
  */
 export function leerPrecio(el) {
-  const precioTipo = el.tipo.value;
+  const precioTipo = tipoElegido(el);
   if (!precioTipo) {
     return { ok: false, error: "Elegí el precio de la entrada (puede ser gratuita)." };
   }
@@ -48,8 +56,14 @@ export function leerPrecio(el) {
     if (!precioValor) {
       return { ok: false, error: "Ingresá el valor en pesos. Ejemplo: 5.000" };
     }
-  } else if (precioTipo === "colaboracion") {
+  } else if (precioTipo === "otro") {
     precioDetalle = el.detalle.value.trim().slice(0, MAX_DETALLE_PRECIO);
+    if (!precioDetalle) {
+      return {
+        ok: false,
+        error: "Escribí qué precio tiene. Ejemplo: alimento no perecedero, a la gorra.",
+      };
+    }
   }
   return {
     ok: true,
@@ -62,8 +76,25 @@ export function leerPrecio(el) {
 
 /** Carga valores existentes en los campos de precio (edición). */
 export function fijarPrecio(el, ev, controlador) {
-  el.tipo.value = ev.precioTipo || "";
+  let tipo = ev.precioTipo || "";
+  let detalle = ev.precioDetalle || "";
+  if (tipo === "colaboracion") {
+    // Tipo anterior: se edita como "Otro" conservando el texto.
+    tipo = "otro";
+    detalle = detalle ? `A colaboración: ${detalle}` : "A colaboración";
+  }
+  el.tipos.forEach((r) => {
+    r.checked = r.value === tipo;
+  });
   el.valor.value = ev.precioValor ? Number(ev.precioValor).toLocaleString("es-AR") : "";
-  el.detalle.value = ev.precioDetalle || "";
+  el.detalle.value = detalle;
+  if (controlador && controlador.actualizar) controlador.actualizar();
+}
+
+/** Desmarca las opciones de precio (al reiniciar el formulario). */
+export function limpiarPrecio(el, controlador) {
+  el.tipos.forEach((r) => {
+    r.checked = false;
+  });
   if (controlador && controlador.actualizar) controlador.actualizar();
 }
