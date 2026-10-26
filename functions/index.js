@@ -23,12 +23,9 @@ const WEBHOOK_MAKE =
 // "Publicar en Instagram" del panel de administración.
 // Pegá acá la URL del webhook del escenario de Instagram.
 const WEBHOOK_MAKE_INSTAGRAM =
-  "https://hook.us2.make.com/PEGAR_AQUI_EL_WEBHOOK_DE_INSTAGRAM";
+  "https://hook.us2.make.com/sww8wa0qzd0ugmjqkfdcj8ejbq1ifzpz";
 
-const ADMIN_EMAILS = [
-  "renzobecerragaitan@gmail.com",
-  "cerezoli387@gmail.com",
-];
+const ADMIN_EMAILS = ["renzobecerragaitan@gmail.com", "cerezoli387@gmail.com"];
 
 // Eventos del día (normales Y destacados/premium): se envían desde las 12:00
 // (hora de Mendoza).
