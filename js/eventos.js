@@ -19,7 +19,10 @@ import {
   paginar,
   renderPaginacion,
 } from "./utils.js?v=202610280010";
-import { procesarImagen4x5, crearControladorImagen } from "./imagen.js?v=202610280010";
+import {
+  procesarImagen4x5,
+  crearControladorImagen,
+} from "./imagen.js?v=202610280010";
 import {
   configurarCamposPrecio,
   leerPrecio,
@@ -286,12 +289,16 @@ export async function subirEvento({
   if (precioTipo === "fijo" || precioTipo === "desde") {
     valorPrecio = parsearMonto(precioValor);
     if (!valorPrecio) {
-      throw new Error("Ingresá el valor de la entrada en pesos. Ejemplo: 5.000");
+      throw new Error(
+        "Ingresá el valor de la entrada en pesos. Ejemplo: 5.000",
+      );
     }
   }
   const detallePrecio =
     precioTipo === "otro" || precioTipo === "colaboracion"
-      ? String(precioDetalle || "").trim().slice(0, MAX_DETALLE_PRECIO)
+      ? String(precioDetalle || "")
+          .trim()
+          .slice(0, MAX_DETALLE_PRECIO)
       : "";
   if (precioTipo === "otro" && !detallePrecio) {
     throw new Error(
@@ -622,23 +629,23 @@ function actualizarBotonEnvio() {
 
 // Actualiza el min del campo fecha y el aviso según el plan elegido.
 // Si la fecha ya elegida deja de ser válida, se limpia y se avisa.
-function actualizarFechaMinPorPlan() {
-  const campoFecha = document.getElementById("event-date");
-  if (!campoFecha) return;
-  const hint = document.getElementById("fecha-hint-gratuito");
-  const esGratuito = Boolean(planElegido && planElegido.id === "gratuito");
-  const minStr = esGratuito ? fechaLocalMasDias(2) : fechaLocalHoy();
+// function actualizarFechaMinPorPlan() {
+//   const campoFecha = document.getElementById("event-date");
+//   if (!campoFecha) return;
+//   const hint = document.getElementById("fecha-hint-gratuito");
+//   const esGratuito = Boolean(planElegido && planElegido.id === "gratuito");
+//   const minStr = esGratuito ? fechaLocalMasDias(2) : fechaLocalHoy();
 
-  campoFecha.min = minStr;
-  if (hint) hint.style.display = esGratuito ? "block" : "none";
+//   campoFecha.min = minStr;
+//   if (hint) hint.style.display = esGratuito ? "block" : "none";
 
-  if (campoFecha.value && campoFecha.value < minStr) {
-    campoFecha.value = "";
-    alert(
-      "La fecha elegida no es válida para el plan seleccionado. Elegí una nueva fecha.",
-    );
-  }
-}
+//   if (campoFecha.value && campoFecha.value < minStr) {
+//     campoFecha.value = "";
+//     alert(
+//       "La fecha elegida no es válida para el plan seleccionado. Elegí una nueva fecha.",
+//     );
+//   }
+// }
 
 // Renderiza el paso "éxito" de los planes pagos.
 // @param {string|null} urlWhatsApp
@@ -1075,8 +1082,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   function irAlInicioDelListado() {
     const destino = barraFiltros || eventsGrid;
     if (!destino) return;
-    const reducido = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    destino.scrollIntoView({ behavior: reducido ? "auto" : "smooth", block: "start" });
+    const reducido = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    destino.scrollIntoView({
+      behavior: reducido ? "auto" : "smooth",
+      block: "start",
+    });
   }
 
   function actualizarChips(cargado) {
@@ -1087,7 +1099,9 @@ document.addEventListener("DOMContentLoaded", async () => {
       const cuenta = chip.querySelector(".chip-count");
       if (cuenta) {
         cuenta.textContent = cargado
-          ? String(filtrarEventosPorFecha(eventosTodos, chip.dataset.filtro).length)
+          ? String(
+              filtrarEventosPorFecha(eventosTodos, chip.dataset.filtro).length,
+            )
           : "";
       }
     });
@@ -1137,7 +1151,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     contenedorExtra.innerHTML = `<p class="aviso-compartido"><i class="fa-solid fa-circle-info" aria-hidden="true"></i> ${escapeHtml(texto)}</p><div class="events-grid evento-extra-grid"></div>`;
     if (ev) {
-      renderizarTarjetas([ev], contenedorExtra.querySelector(".evento-extra-grid"));
+      renderizarTarjetas(
+        [ev],
+        contenedorExtra.querySelector(".evento-extra-grid"),
+      );
     }
     contenedorExtra.scrollIntoView({ block: "start" });
   }
@@ -1150,7 +1167,9 @@ document.addEventListener("DOMContentLoaded", async () => {
       try {
         const snap = await getDoc(doc(db, "eventos", id));
         if (!snap.exists() || snap.data().estado !== "aprobado") {
-          mostrarAvisoCompartido("Este evento ya no está disponible. Mirá los demás eventos de la agenda.");
+          mostrarAvisoCompartido(
+            "Este evento ya no está disponible. Mirá los demás eventos de la agenda.",
+          );
           return;
         }
         eventoExtra = { id: snap.id, ...snap.data() };
@@ -1162,7 +1181,10 @@ document.addEventListener("DOMContentLoaded", async () => {
           eventoExtra,
         );
       } catch (err) {
-        console.warn("[compartir] No se pudo cargar el evento compartido:", err);
+        console.warn(
+          "[compartir] No se pudo cargar el evento compartido:",
+          err,
+        );
       }
       return;
     }
@@ -1260,7 +1282,9 @@ document.addEventListener("DOMContentLoaded", async () => {
           return;
         }
         // Sin Web Share API (escritorio): se despliega el menú con opciones.
-        const menu = btnCompartir.closest(".event-body").querySelector(".share-menu");
+        const menu = btnCompartir
+          .closest(".event-body")
+          .querySelector(".share-menu");
         if (menu) {
           const abrir = menu.hidden;
           menu.hidden = !abrir;
@@ -1275,7 +1299,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         const original = btnCopiar.innerHTML;
         try {
           await navigator.clipboard.writeText(url);
-          btnCopiar.innerHTML = '<i class="fa-solid fa-check"></i> ¡Enlace copiado!';
+          btnCopiar.innerHTML =
+            '<i class="fa-solid fa-check"></i> ¡Enlace copiado!';
           setTimeout(() => {
             btnCopiar.innerHTML = original;
           }, 2000);
@@ -1359,14 +1384,18 @@ document.addEventListener("DOMContentLoaded", async () => {
         input: inputImagen,
         caja: document.getElementById("image-preview-box"),
         img: document.getElementById("image-preview"),
-        radios: Array.from(document.querySelectorAll('input[name="image-mode"]')),
+        radios: Array.from(
+          document.querySelectorAll('input[name="image-mode"]'),
+        ),
         estado: document.getElementById("image-preview-status"),
       })
     : null;
 
   // Precio de la entrada
   const precioEls = {
-    tipos: Array.from(document.querySelectorAll('input[name="event-price-type"]')),
+    tipos: Array.from(
+      document.querySelectorAll('input[name="event-price-type"]'),
+    ),
     grupoValor: document.getElementById("price-value-group"),
     valor: document.getElementById("event-price-value"),
     etiquetaValor: document.getElementById("price-value-label"),
@@ -1471,7 +1500,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       const precio = leerPrecio(precioEls);
       if (!precio.ok) {
         alert(precio.error);
-        const destino = precioEls.tipos.find((r) => r.checked) || precioEls.tipos[0];
+        const destino =
+          precioEls.tipos.find((r) => r.checked) || precioEls.tipos[0];
         if (destino) destino.focus();
         return;
       }
