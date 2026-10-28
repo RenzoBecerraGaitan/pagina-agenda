@@ -1,12 +1,18 @@
 // Panel de Control y Administración de Eventos (/admin)
-import { app, db, storage, auth, firebaseConfig } from "./firebase-config.js?v=202610280003";
-import { googleProvider } from "./auth.js?v=202610280003";
+import {
+  app,
+  db,
+  auth,
+  firebaseConfig,
+  cargarStorage,
+} from "./firebase-config.js?v=202610280010";
+import { googleProvider } from "./auth.js?v=202610280010";
 import {
   fechaLocalHoy,
   LOCALIDADES_POR_ZONA,
   poblarSelectLocalidades,
   MAX_DESCRIPCION,
-} from "./eventos.js?v=202610280003";
+} from "./eventos.js?v=202610280010";
 import {
   normalizarTelefonoAR,
   formatearPrecioEvento,
@@ -15,14 +21,14 @@ import {
   paginar,
   renderPaginacion,
   POR_PAGINA,
-} from "./utils.js?v=202610280003";
-import { crearControladorImagen } from "./imagen.js?v=202610280003";
+} from "./utils.js?v=202610280010";
+import { crearControladorImagen } from "./imagen.js?v=202610280010";
 import {
   configurarCamposPrecio,
   leerPrecio,
   fijarPrecio,
   limpiarPrecio,
-} from "./campos-evento.js?v=202610280003";
+} from "./campos-evento.js?v=202610280010";
 import {
   signInWithPopup,
   signOut,
@@ -44,12 +50,6 @@ import {
   getFunctions,
   httpsCallable,
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-functions.js";
-import {
-  ref,
-  deleteObject,
-  uploadBytes,
-  getDownloadURL,
-} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
 // Configuración explícita de persistencia en localStorage para evitar bucles o pérdida de sesión
 setPersistence(auth, browserLocalPersistence).catch((err) => {
@@ -239,6 +239,7 @@ export async function eliminarEvento(id, imagenUrl) {
       const pathStorage = extraerPathStorage(imagenUrl);
       if (pathStorage) {
         try {
+          const { storage, ref, deleteObject } = await cargarStorage();
           await deleteObject(ref(storage, pathStorage));
         } catch (storageErr) {
           console.warn(
@@ -623,7 +624,7 @@ function renderizarListadoAdmin(eventos, contenedor, tab) {
         };">
           <div class="admin-item-info">
             <a ${imagenLink ? `href="${escapeHtml(imagenLink)}" target="_blank" rel="noopener noreferrer"` : ""} class="admin-item-img-link" title="Abrir la imagen en tamaño completo">
-              <img src="${escapeHtml(imagen)}" alt="${escapeHtml(ev.nombre || "Evento")}" class="admin-item-img" loading="lazy">
+              <img src="${escapeHtml(imagen)}" alt="${escapeHtml(ev.nombre || "Evento")}" class="admin-item-img" width="1080" height="1350" loading="lazy" decoding="async">
             </a>
             <div class="admin-item-datos">
               <div style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.35rem; flex-wrap: wrap;">
@@ -942,6 +943,7 @@ async function guardarEdicion(e) {
   btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...';
 
   let refNueva = null;
+  let sdkStorage = null; // SDK de Storage (se descarga solo si hay imagen nueva)
   try {
     if (firebaseConfig.apiKey) {
       await obtenerTokenValido();
@@ -951,6 +953,8 @@ async function guardarEdicion(e) {
         ? controladorImagenEdicion.getArchivo()
         : null;
       if (archivoNuevo) {
+        sdkStorage = await cargarStorage();
+        const { storage, ref, uploadBytes, getDownloadURL } = sdkStorage;
         const blob = await controladorImagenEdicion.getBlob();
         const base =
           archivoNuevo.name
@@ -972,7 +976,7 @@ async function guardarEdicion(e) {
         const pathViejo = extraerPathStorage(ev.imagenUrl);
         if (pathViejo) {
           try {
-            await deleteObject(ref(storage, pathViejo));
+            await sdkStorage.deleteObject(sdkStorage.ref(sdkStorage.storage, pathViejo));
           } catch (errBorrado) {
             console.warn("[admin] No se pudo borrar la imagen anterior:", errBorrado);
           }
@@ -989,7 +993,7 @@ async function guardarEdicion(e) {
     // Si la imagen nueva ya se subió pero falló el guardado, se limpia.
     if (refNueva) {
       try {
-        await deleteObject(refNueva);
+        await sdkStorage.deleteObject(refNueva);
       } catch (_) {
         /* mejor esfuerzo */
       }

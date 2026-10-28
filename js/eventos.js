@@ -1,5 +1,10 @@
 // Lógica de carga, consulta y renderizado de eventos con Firebase Firestore y Storage
-import { db, storage, auth, firebaseConfig } from "./firebase-config.js?v=202610280003";
+import {
+  db,
+  auth,
+  firebaseConfig,
+  cargarStorage,
+} from "./firebase-config.js?v=202610280010";
 import {
   normalizarTelefonoAR,
   escapeHtml,
@@ -13,13 +18,13 @@ import {
   urlSegura,
   paginar,
   renderPaginacion,
-} from "./utils.js?v=202610280003";
-import { procesarImagen4x5, crearControladorImagen } from "./imagen.js?v=202610280003";
+} from "./utils.js?v=202610280010";
+import { procesarImagen4x5, crearControladorImagen } from "./imagen.js?v=202610280010";
 import {
   configurarCamposPrecio,
   leerPrecio,
   limpiarPrecio,
-} from "./campos-evento.js?v=202610280003";
+} from "./campos-evento.js?v=202610280010";
 import {
   collection,
   doc,
@@ -30,11 +35,6 @@ import {
   serverTimestamp,
   writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-import {
-  ref,
-  uploadBytes,
-  getDownloadURL,
-} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
 /**
  * Única fuente de verdad de las localidades permitidas por zona (body[data-location]).
@@ -330,6 +330,8 @@ export async function subirEvento({
       .replace(/[^a-zA-Z0-9._-]/g, "_")
       .slice(0, 60) || "evento";
 
+  // El SDK de Storage se descarga recién acá, al publicar.
+  const { storage, ref, uploadBytes, getDownloadURL } = await cargarStorage();
   const storageRef = ref(storage, `eventos/${Date.now()}_${nombreBase}.jpg`);
   const snapshot = await uploadBytes(storageRef, blobImagen, {
     contentType: "image/jpeg",
@@ -774,7 +776,7 @@ export function renderizarTarjetas(eventos, contenedor, opciones = {}) {
   }
 
   contenedor.innerHTML = eventos
-    .map((ev) => {
+    .map((ev, indice) => {
       const esDestacado = Boolean(ev.destacado);
       const fechaFormateada = formatearFecha(ev.fecha);
       const nombre = ev.nombre || "Sin título";
@@ -799,7 +801,7 @@ export function renderizarTarjetas(eventos, contenedor, opciones = {}) {
               ? '<span class="featured-badge"><i class="fa-solid fa-star"></i> Destacado</span>'
               : ""
           }
-          <img src="${escapeHtml(imagen)}" alt="${escapeHtml(nombre)}" class="event-img" loading="lazy">
+          <img src="${escapeHtml(imagen)}" alt="${escapeHtml(nombre)}" class="event-img" width="1080" height="1350" decoding="async" ${indice === 0 ? 'fetchpriority="high"' : 'loading="lazy"'}>
           <div class="event-body">
             <span class="event-date-badge">
               <i class="fa-regular fa-calendar"></i>
@@ -1294,6 +1296,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     btnOpenUpload.addEventListener("click", () => {
       establecerFechaMin();
       abrirModalCarga();
+      // Se adelanta la descarga del SDK de Storage para que ya esté listo al
+      // enviar el evento (no se descarga antes de que alguien abra el formulario).
+      cargarStorage().catch(() => {});
     });
   }
 

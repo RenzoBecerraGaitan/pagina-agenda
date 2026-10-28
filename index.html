@@ -15,11 +15,20 @@
     <meta property="og:description" content="Descubrí qué hacer en Mendoza hoy y este fin de semana. La mejor agenda de eventos, recitales, fiestas, obras de teatro y peñas en San Rafael, Gran Mendoza y Zona Este." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Tipografías: no bloquean el primer render (se aplican al llegar) -->
     <link
-      rel="stylesheet"
+      rel="preload"
+      as="style"
       href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap"
+      onload="this.onload=null;this.rel='stylesheet'"
     />
-    <link rel="stylesheet" href="css/styles.css?v=202610280003" />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap"
+      />
+    </noscript>
+    <link rel="stylesheet" href="css/styles.css?v=202610280010" />
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
@@ -125,6 +134,8 @@
         <div class="location-card">
           <img
             src="assets/logoagendasanrafael.webp"
+            loading="lazy"
+            decoding="async"
             alt="Eventos y recitales en San Rafael Mendoza"
           />
           <div class="location-card-content">
@@ -144,6 +155,8 @@
         <div class="location-card">
           <img
             src="assets/logoagendamendoza.webp"
+            loading="lazy"
+            decoding="async"
             alt="Agenda de eventos Gran Mendoza, Luján, Godoy Cruz y Las Heras"
           />
           <div class="location-card-content">
@@ -163,6 +176,8 @@
         <div class="location-card">
           <img
             src="assets/logoagendazonaeste.webp"
+            loading="lazy"
+            decoding="async"
             alt="Cartelera de espectáculos Zona Este San Martín y Rivadavia"
           />
           <div class="location-card-content">
@@ -243,9 +258,9 @@
       </p>
     </footer>
 
-    <script src="js/app.js?v=202610280003"></script>
-    <script type="module" src="js/contador.js?v=202610280003"></script>
-    <script type="module" src="js/whatsapp.js?v=202610280003"></script>
-    <script src="js/nav.js?v=202610280003" defer></script>
+    <script src="js/app.js?v=202610280010"></script>
+    <script type="module" src="js/contador.js?v=202610280010"></script>
+    <script type="module" src="js/whatsapp.js?v=202610280010"></script>
+    <script src="js/nav.js?v=202610280010" defer></script>
   </body>
 </html>

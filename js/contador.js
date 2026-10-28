@@ -65,7 +65,7 @@ function animar(hasta, duracion) {
 async function sincronizarConFirestore() {
   try {
     const [{ db }, { doc, getDoc }] = await Promise.all([
-      import("./firebase-config.js?v=202610280003"),
+      import("./firebase-config.js?v=202610280010"),
       import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js"),
     ]);
     const snap = await getDoc(doc(db, COLECCION, DOCUMENTO));

@@ -667,6 +667,7 @@ header {
 .event-img {
   display: block;
   width: 100%;
+  height: auto; /* el atributo height del <img> no debe estirar la tarjeta */
   aspect-ratio: 4 / 5;
   object-fit: cover;
   background: var(--surface-alt);
@@ -2021,4 +2022,19 @@ input[type="file"].form-control::file-selector-button {
   .admin-comunidad-form .form-control {
     width: 220px;
   }
+}
+
+/* --------------------------------------------------------------------------
+   Carga diferida: lo que está fuera de pantalla no se renderiza hasta que se
+   acerca (content-visibility). contain-intrinsic-size reserva su alto para
+   que el scroll no salte.
+   -------------------------------------------------------------------------- */
+.seo-keywords-section {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 560px;
+}
+
+footer {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 120px;
 }

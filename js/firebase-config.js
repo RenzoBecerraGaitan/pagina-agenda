@@ -2,7 +2,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-import { getStorage } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
 // Configuración de Firebase (completar con las credenciales de Firebase Console)
 export const firebaseConfig = {
@@ -20,6 +19,24 @@ export const app = initializeApp(firebaseConfig);
 // Inicializar y exportar servicios de Firebase
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-export const storage = getStorage(app);
+
+// Firebase Storage se descarga SOLO cuando hace falta (subir, reemplazar o
+// borrar una imagen), no al abrir la página. Las demás páginas no lo necesitan
+// para mostrar eventos.
+const URL_STORAGE =
+  "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+let storageCargado = null;
+
+export function cargarStorage() {
+  if (!storageCargado) {
+    storageCargado = import(URL_STORAGE)
+      .then((sdk) => ({ ...sdk, storage: sdk.getStorage(app) }))
+      .catch((err) => {
+        storageCargado = null; // permite reintentar si falló la descarga
+        throw err;
+      });
+  }
+  return storageCargado;
+}
 
 export default app;
