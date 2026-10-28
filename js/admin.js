@@ -1,12 +1,12 @@
 // Panel de Control y Administración de Eventos (/admin)
-import { app, db, storage, auth, firebaseConfig } from "./firebase-config.js?v=202610251319";
-import { googleProvider } from "./auth.js?v=202610251319";
+import { app, db, storage, auth, firebaseConfig } from "./firebase-config.js?v=202610280003";
+import { googleProvider } from "./auth.js?v=202610280003";
 import {
   fechaLocalHoy,
   LOCALIDADES_POR_ZONA,
   poblarSelectLocalidades,
   MAX_DESCRIPCION,
-} from "./eventos.js?v=202610251319";
+} from "./eventos.js?v=202610280003";
 import {
   normalizarTelefonoAR,
   formatearPrecioEvento,
@@ -15,14 +15,14 @@ import {
   paginar,
   renderPaginacion,
   POR_PAGINA,
-} from "./utils.js?v=202610251319";
-import { crearControladorImagen } from "./imagen.js?v=202610251319";
+} from "./utils.js?v=202610280003";
+import { crearControladorImagen } from "./imagen.js?v=202610280003";
 import {
   configurarCamposPrecio,
   leerPrecio,
   fijarPrecio,
   limpiarPrecio,
-} from "./campos-evento.js?v=202610251319";
+} from "./campos-evento.js?v=202610280003";
 import {
   signInWithPopup,
   signOut,
@@ -1237,6 +1237,7 @@ async function actualizarVistaAdminParaUsuario(user) {
   }
   await cargarYRenderizarEventos();
   await cargarConfigWhatsAppAdmin();
+  await cargarContadorAdmin();
 }
 
 /**
@@ -1312,6 +1313,56 @@ async function guardarConfigWhatsApp() {
 }
 
 /**
+ * Contador de la comunidad (portada): documento config/community, campo
+ * memberCount. La portada lo lee en segundo plano y anima hasta ese valor.
+ */
+const CONTADOR_MAX = 100000000;
+
+async function cargarContadorAdmin() {
+  const input = document.getElementById("member-count-admin");
+  if (!input) return;
+  try {
+    const snap = await getDoc(doc(db, "config", "community"));
+    if (snap.exists() && Number.isInteger(snap.data().memberCount)) {
+      input.value = snap.data().memberCount;
+    }
+  } catch (err) {
+    console.error("[admin] Error al leer el contador de la comunidad:", err);
+  }
+}
+
+async function guardarContadorAdmin() {
+  const input = document.getElementById("member-count-admin");
+  if (!input) return;
+  const crudo = input.value.trim();
+  const valor = Number(crudo);
+  if (crudo === "" || !Number.isInteger(valor) || valor < 0 || valor > CONTADOR_MAX) {
+    alert("Ingresá un número entero válido (0 o más).");
+    input.focus();
+    return;
+  }
+  const btn = document.getElementById("btn-guardar-contador");
+  if (btn) btn.disabled = true;
+  try {
+    await obtenerTokenValido();
+    await setDoc(
+      doc(db, "config", "community"),
+      {
+        memberCount: valor,
+        actualizadoPor: auth.currentUser.email,
+        fecha: serverTimestamp(),
+      },
+      { merge: true },
+    );
+    alert("Contador actualizado. La portada mostrará el nuevo número.");
+  } catch (error) {
+    alert(describirErrorAdmin(error, "guardar el contador de la comunidad"));
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+/**
  * Inicialización del panel de administración
  */
 function initAdmin() {
@@ -1340,6 +1391,12 @@ function initAdmin() {
 
   // Edición de eventos
   initEdicion();
+
+  // Contador de la comunidad
+  const btnGuardarContador = document.getElementById("btn-guardar-contador");
+  if (btnGuardarContador) {
+    btnGuardarContador.addEventListener("click", guardarContadorAdmin);
+  }
 
   // Guardar links de WhatsApp
   const btnGuardarWa = document.getElementById("btn-guardar-whatsapp");

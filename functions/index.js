@@ -23,9 +23,12 @@ const WEBHOOK_MAKE =
 // "Publicar en Instagram" del panel de administración.
 // Pegá acá la URL del webhook del escenario de Instagram.
 const WEBHOOK_MAKE_INSTAGRAM =
-  "https://hook.us2.make.com/sww8wa0qzd0ugmjqkfdcj8ejbq1ifzpz";
+  "https://hook.us2.make.com/PEGAR_AQUI_EL_WEBHOOK_DE_INSTAGRAM";
 
-const ADMIN_EMAILS = ["renzobecerragaitan@gmail.com", "cerezoli387@gmail.com"];
+const ADMIN_EMAILS = [
+  "renzobecerragaitan@gmail.com",
+  "cerezoli387@gmail.com",
+];
 
 // Eventos del día (normales Y destacados/premium): se envían desde las 12:00
 // (hora de Mendoza).
@@ -58,7 +61,7 @@ exports.onEventoAprobado = onDocumentUpdated(
       despues.estado === "aprobado" &&
       despues.destacado === true
     ) {
-      const ok = await enviarAMake(
+      const { ok } = await enviarAMake(
         WEBHOOK_MAKE,
         event.params.eventoId,
         despues,
@@ -102,7 +105,7 @@ exports.publicarEventosDelDia = onSchedule(
 
     console.log(`Enviando ${pendientes.length} evento(s) del día ${hoyStr}.`);
     for (const doc of pendientes) {
-      const ok = await enviarAMake(WEBHOOK_MAKE, doc.id, doc.data(), {
+      const { ok } = await enviarAMake(WEBHOOK_MAKE, doc.id, doc.data(), {
         momento: "dia_del_evento",
       });
       // Solo se marca como publicado si Make respondió bien; si falló, se
@@ -161,13 +164,13 @@ exports.publicarEnInstagram = onCall(
       );
     }
 
-    const ok = await enviarAMake(WEBHOOK_MAKE_INSTAGRAM, eventoId, data, {
+    const resultado = await enviarAMake(WEBHOOK_MAKE_INSTAGRAM, eventoId, data, {
       canal: "instagram",
     });
-    if (!ok) {
+    if (!resultado.ok) {
       throw new HttpsError(
         "internal",
-        "Make no respondió. Revisá el escenario de Instagram e intentá de nuevo.",
+        `Make no aceptó el envío (${resultado.detalle}). Revisá la URL del webhook y que el escenario de Instagram esté activo.`,
       );
     }
 
@@ -181,8 +184,29 @@ exports.publicarEnInstagram = onCall(
 );
 
 /**
+ * Explica por qué falló una llamada a Make, en palabras legibles.
+ */
+function describirErrorMake(error) {
+  if (error.response) {
+    const cuerpo =
+      typeof error.response.data === "string"
+        ? error.response.data
+        : JSON.stringify(error.response.data || "");
+    const texto = String(cuerpo || "").trim().slice(0, 200);
+    return `HTTP ${error.response.status}${texto ? `: ${texto}` : ""}`;
+  }
+  if (error.code === "ECONNABORTED") {
+    return "Make tardó más de 20 segundos en responder";
+  }
+  if (error.code === "ENOTFOUND" || error.code === "EAI_AGAIN") {
+    return "no se encontró el servidor de Make: la URL del webhook está mal copiada";
+  }
+  return error.message;
+}
+
+/**
  * Envía un evento a un webhook de Make.
- * @returns {Promise<boolean>} true si Make respondió bien
+ * @returns {Promise<{ok: boolean, detalle?: string}>}
  */
 async function enviarAMake(url, id, data, extra = {}) {
   try {
@@ -212,9 +236,10 @@ async function enviarAMake(url, id, data, extra = {}) {
       { timeout: 20000 },
     );
     console.log(`Evento ${id} enviado a Make correctamente.`);
-    return true;
+    return { ok: true };
   } catch (error) {
-    console.error(`Error enviando el evento ${id} a Make:`, error.message);
-    return false;
+    const detalle = describirErrorMake(error);
+    console.error(`Error enviando el evento ${id} a Make: ${detalle}`);
+    return { ok: false, detalle };
   }
 }

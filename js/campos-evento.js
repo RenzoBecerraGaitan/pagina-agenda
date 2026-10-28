@@ -1,5 +1,5 @@
 // Campos de precio del formulario de eventos (carga pública y edición del admin).
-import { parsearMonto, MAX_DETALLE_PRECIO, construirPrecio } from "./utils.js?v=202610251319";
+import { parsearMonto, MAX_DETALLE_PRECIO, construirPrecio } from "./utils.js?v=202610280003";
 
 function tipoElegido(el) {
   const marcado = el.tipos.find((r) => r.checked);

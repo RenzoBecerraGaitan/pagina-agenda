@@ -1881,3 +1881,144 @@ input[type="file"].form-control::file-selector-button {
     animation: none !important;
   }
 }
+
+/* Evento abierto desde un enlace compartido que no está en el listado */
+.evento-extra {
+  margin-bottom: 1.5rem;
+}
+
+.aviso-compartido {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+  padding: 0.8rem 1rem;
+  border: 1px solid #ecd9b6;
+  border-radius: var(--radius);
+  background: #fff9ed;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.aviso-compartido i {
+  margin-top: 0.2rem;
+  color: var(--primary);
+}
+
+.evento-extra-grid:empty {
+  display: none;
+}
+
+@media (min-width: 640px) {
+  .evento-extra-grid {
+    grid-template-columns: minmax(0, 420px);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Contador de la comunidad (portada) y su módulo en el admin
+   -------------------------------------------------------------------------- */
+.hero-comunidad {
+  display: flex;
+  justify-content: center;
+  margin: 0 auto 1.4rem;
+}
+
+.comunidad-badge {
+  --guinda: #4a1525;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  max-width: 100%;
+  padding: 0.65rem 1.15rem;
+  border: 1.5px solid rgba(74, 21, 37, 0.2);
+  border-radius: 28px;
+  background: #fff6e5;
+  box-shadow: 0 4px 14px rgba(74, 21, 37, 0.08);
+  color: var(--guinda);
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: left;
+}
+
+.comunidad-numero {
+  font-size: 1.08em;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Punto verde "en vivo" */
+.live-dot {
+  flex: 0 0 10px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #22c55e;
+  animation: live-pulse 1.8s ease-out infinite;
+}
+
+@keyframes live-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 9px rgba(34, 197, 94, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (min-width: 768px) {
+  .comunidad-badge {
+    padding: 0.7rem 1.4rem;
+    font-size: 1rem;
+  }
+}
+
+/* Admin: módulo del contador */
+.admin-comunidad-titulo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+  font-size: 1.05rem;
+}
+
+.admin-comunidad-titulo i {
+  color: var(--primary);
+}
+
+.admin-comunidad-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.admin-comunidad-form .form-group {
+  margin-bottom: 0;
+}
+
+@media (min-width: 640px) {
+  .admin-comunidad-form {
+    flex-direction: row;
+    align-items: flex-end;
+  }
+
+  .admin-comunidad-form .form-control {
+    width: 220px;
+  }
+}

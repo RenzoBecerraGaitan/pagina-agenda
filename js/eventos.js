@@ -1,5 +1,5 @@
 // Lógica de carga, consulta y renderizado de eventos con Firebase Firestore y Storage
-import { db, storage, auth, firebaseConfig } from "./firebase-config.js?v=202610251319";
+import { db, storage, auth, firebaseConfig } from "./firebase-config.js?v=202610280003";
 import {
   normalizarTelefonoAR,
   escapeHtml,
@@ -13,13 +13,13 @@ import {
   urlSegura,
   paginar,
   renderPaginacion,
-} from "./utils.js?v=202610251319";
-import { procesarImagen4x5, crearControladorImagen } from "./imagen.js?v=202610251319";
+} from "./utils.js?v=202610280003";
+import { procesarImagen4x5, crearControladorImagen } from "./imagen.js?v=202610280003";
 import {
   configurarCamposPrecio,
   leerPrecio,
   limpiarPrecio,
-} from "./campos-evento.js?v=202610251319";
+} from "./campos-evento.js?v=202610280003";
 import {
   collection,
   doc,
@@ -1120,11 +1120,50 @@ document.addEventListener("DOMContentLoaded", async () => {
   );
 
   // Si se llegó con un enlace compartido (?evento=ID), mostrar ese evento.
-  function mostrarEventoCompartido() {
+  // Evento que llegó por enlace compartido pero no está en el listado (por
+  // ejemplo, ya pasó): se muestra aparte, arriba de los filtros.
+  let eventoExtra = null;
+  let contenedorExtra = null;
+
+  function mostrarAvisoCompartido(texto, ev) {
+    if (!barraFiltros) return;
+    if (!contenedorExtra) {
+      contenedorExtra = document.createElement("section");
+      contenedorExtra.className = "evento-extra";
+      barraFiltros.parentNode.insertBefore(contenedorExtra, barraFiltros);
+      contenedorExtra.addEventListener("click", manejarClicTarjetas);
+    }
+    contenedorExtra.innerHTML = `<p class="aviso-compartido"><i class="fa-solid fa-circle-info" aria-hidden="true"></i> ${escapeHtml(texto)}</p><div class="events-grid evento-extra-grid"></div>`;
+    if (ev) {
+      renderizarTarjetas([ev], contenedorExtra.querySelector(".evento-extra-grid"));
+    }
+    contenedorExtra.scrollIntoView({ block: "start" });
+  }
+
+  async function mostrarEventoCompartido() {
     const id = new URLSearchParams(window.location.search).get("evento");
     if (!id) return;
     const indice = eventosTodos.findIndex((ev) => ev.id === id);
-    if (indice === -1) return;
+    if (indice === -1) {
+      try {
+        const snap = await getDoc(doc(db, "eventos", id));
+        if (!snap.exists() || snap.data().estado !== "aprobado") {
+          mostrarAvisoCompartido("Este evento ya no está disponible. Mirá los demás eventos de la agenda.");
+          return;
+        }
+        eventoExtra = { id: snap.id, ...snap.data() };
+        const pasado = eventoExtra.fecha && eventoExtra.fecha < fechaLocalHoy();
+        mostrarAvisoCompartido(
+          pasado
+            ? "Este evento ya se realizó. Abajo tenés los próximos eventos."
+            : "Evento compartido",
+          eventoExtra,
+        );
+      } catch (err) {
+        console.warn("[compartir] No se pudo cargar el evento compartido:", err);
+      }
+      return;
+    }
     filtroActual = "todos";
     paginaActual = Math.floor(indice / POR_PAGINA) + 1;
     renderizarVista();
@@ -1174,7 +1213,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Acciones delegadas dentro del listado: "Ver más", compartir, copiar enlace
   // y "Ver todos los eventos" (cuando un filtro no tiene resultados).
   if (eventsGrid) {
-    eventsGrid.addEventListener("click", async (e) => {
+    eventsGrid.addEventListener("click", manejarClicTarjetas);
+  }
+
+  async function manejarClicTarjetas(e) {
+    {
       const reset = e.target.closest("[data-filtro-reset]");
       if (reset) {
         cambiarFiltro(reset.dataset.filtroReset);
@@ -1195,7 +1238,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       const btnCompartir = e.target.closest(".btn-compartir");
       if (btnCompartir) {
-        const ev = eventosTodos.find((x) => x.id === btnCompartir.dataset.id);
+        const ev = [...eventosTodos, eventoExtra].find(
+          (x) => x && x.id === btnCompartir.dataset.id,
+        );
         if (!ev) return;
         if (navigator.share) {
           try {
@@ -1236,7 +1281,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           window.prompt("Copiá el enlace del evento:", url);
         }
       }
-    });
+    }
   }
 
   // Gestión de Modal

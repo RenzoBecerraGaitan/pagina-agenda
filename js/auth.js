@@ -7,7 +7,7 @@ import {
   setPersistence,
   browserLocalPersistence
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { auth } from "./firebase-config.js?v=202610251319";
+import { auth } from "./firebase-config.js?v=202610280003";
 
 // Configuración explícita de persistencia local en el almacenamiento del navegador
 setPersistence(auth, browserLocalPersistence).catch((err) => {
