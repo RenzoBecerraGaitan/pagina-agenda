@@ -262,11 +262,11 @@ export async function subirEvento({
   }
 
   // Plan gratuito: el evento debe cargarse con al menos 2 días de anticipación
-  if (plan === "gratuito" && fecha && fecha < fechaLocalMasDias(2)) {
-    throw new Error(
-      "Con el Plan Gratuito el evento debe cargarse con al menos 2 días de anticipación.",
-    );
-  }
+  // if (plan === "gratuito" && fecha && fecha < fechaLocalMasDias(2)) {
+  //   throw new Error(
+  //     "Con el Plan Gratuito el evento debe cargarse con al menos 2 días de anticipación.",
+  //   );
+  // }
 
   // Validación de hora: minutos 00, 15, 30 o 45
   const HORA_REGEX = /^([01]\d|2[0-3]):(00|15|30|45)$/;
@@ -1478,16 +1478,16 @@ document.addEventListener("DOMContentLoaded", async () => {
         alert("La fecha no puede ser anterior a hoy.");
         return;
       }
-      if (
-        planElegido.id === "gratuito" &&
-        fecha &&
-        fecha < fechaLocalMasDias(2)
-      ) {
-        alert(
-          "Con el Plan Gratuito el evento debe cargarse con al menos 2 días de anticipación.",
-        );
-        return;
-      }
+      // if (
+      //   planElegido.id === "gratuito" &&
+      //   fecha &&
+      //   fecha < fechaLocalMasDias(2)
+      // ) {
+      //   alert(
+      //     "Con el Plan Gratuito el evento debe cargarse con al menos 2 días de anticipación.",
+      //   );
+      //   return;
+      // }
 
       // Validación de hora: minutos 00, 15, 30 o 45
       const HORA_REGEX = /^([01]\d|2[0-3]):(00|15|30|45)$/;
