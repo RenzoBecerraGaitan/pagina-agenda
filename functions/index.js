@@ -4,9 +4,12 @@ const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const { FieldValue } = require("firebase-admin/firestore");
 const axios = require("axios");
+const { captionWhatsapp, captionInstagram } = require("./captions");
+const { crearObtenerLinkGrupo } = require("./grupos");
 
 admin.initializeApp();
 const db = admin.firestore();
+const obtenerLinkGrupo = crearObtenerLinkGrupo(db);
 
 // Región de Firestore (Santiago): triggers de base de datos y función del admin.
 const REGION_FIRESTORE = "southamerica-west1";
@@ -25,10 +28,7 @@ const WEBHOOK_MAKE =
 const WEBHOOK_MAKE_INSTAGRAM =
   "https://hook.us2.make.com/PEGAR_AQUI_EL_WEBHOOK_DE_INSTAGRAM";
 
-const ADMIN_EMAILS = [
-  "renzobecerragaitan@gmail.com",
-  "cerezoli387@gmail.com",
-];
+const ADMIN_EMAILS = ["renzobecerragaitan@gmail.com", "cerezoli387@gmail.com"];
 
 // Eventos del día (normales Y destacados/premium): se envían desde las 12:00
 // (hora de Mendoza).
@@ -164,9 +164,14 @@ exports.publicarEnInstagram = onCall(
       );
     }
 
-    const resultado = await enviarAMake(WEBHOOK_MAKE_INSTAGRAM, eventoId, data, {
-      canal: "instagram",
-    });
+    const resultado = await enviarAMake(
+      WEBHOOK_MAKE_INSTAGRAM,
+      eventoId,
+      data,
+      {
+        canal: "instagram",
+      },
+    );
     if (!resultado.ok) {
       throw new HttpsError(
         "internal",
@@ -192,7 +197,9 @@ function describirErrorMake(error) {
       typeof error.response.data === "string"
         ? error.response.data
         : JSON.stringify(error.response.data || "");
-    const texto = String(cuerpo || "").trim().slice(0, 200);
+    const texto = String(cuerpo || "")
+      .trim()
+      .slice(0, 200);
     return `HTTP ${error.response.status}${texto ? `: ${texto}` : ""}`;
   }
   if (error.code === "ECONNABORTED") {
@@ -231,6 +238,9 @@ async function enviarAMake(url, id, data, extra = {}) {
         imagenUrl: data.imagenUrl || "",
         destacado: data.destacado || false,
         plan: data.plan || "",
+        linkGrupo,
+        captionWhatsapp: captionWhatsapp(data, linkGrupo),
+        captionInstagram: captionInstagram(data),
         ...extra,
       },
       { timeout: 20000 },
