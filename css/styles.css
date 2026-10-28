@@ -360,8 +360,16 @@ header {
   border: 1px solid var(--border-color);
   border-radius: 22px;
   background:
-    radial-gradient(110% 90% at 0% 0%, rgba(212, 149, 43, 0.24), transparent 55%),
-    radial-gradient(100% 90% at 100% 100%, rgba(107, 29, 63, 0.16), transparent 55%),
+    radial-gradient(
+      110% 90% at 0% 0%,
+      rgba(212, 149, 43, 0.24),
+      transparent 55%
+    ),
+    radial-gradient(
+      100% 90% at 100% 100%,
+      rgba(107, 29, 63, 0.16),
+      transparent 55%
+    ),
     var(--surface);
 }
 
@@ -1186,7 +1194,11 @@ footer {
 
 .plan-card.pago {
   border-color: var(--gold);
-  background: linear-gradient(180deg, rgba(212, 149, 43, 0.1), var(--surface) 55%);
+  background: linear-gradient(
+    180deg,
+    rgba(212, 149, 43, 0.1),
+    var(--surface) 55%
+  );
 }
 
 .plan-titulo {
@@ -1676,6 +1688,31 @@ input[type="file"].form-control::file-selector-button {
   .img-preview {
     width: 150px;
   }
+}
+
+/* Corrección para input[type="date"] en iOS / Safari móvil */
+input[type="date"].form-control {
+  /* Evita que Safari fuerce la altura mínima fija de forma rara */
+  min-height: 48px;
+  height: auto;
+  line-height: normal;
+
+  /* Permite que el texto interno o placeholder ocupe todo el espacio */
+  display: flex;
+  align-items: center;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Forzar que las partes internas del datepicker en iOS/WebKit sean visibles */
+input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+  min-height: 1.2em;
+}
+
+/* Opcional: asegurarte de que el texto del valor o placeholder sea del color correcto */
+input[type="date"]:invalid {
+  color: #a39a9e; /* Mismo color que el placeholder */
 }
 
 /* --------------------------------------------------------------------------
