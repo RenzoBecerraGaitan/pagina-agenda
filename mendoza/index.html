@@ -13,9 +13,19 @@
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="es_AR" />
     <meta property="og:site_name" content="Agenda Cultural Mendoza" />
-    <meta property="og:title" content="Qué hacer en Gran Mendoza | Agenda Cultural, Eventos y Recitales" />
-    <meta property="og:description" content="¿Buscás qué hacer en Mendoza Capital y Gran Mendoza? Consultá la agenda completa de eventos, recitales, obras de teatro, sunsets y salidas en Ciudad, Godoy Cruz y Luján." />
-    <link rel="preconnect" href="https://firebasestorage.googleapis.com" crossorigin />
+    <meta
+      property="og:title"
+      content="Qué hacer en Gran Mendoza | Agenda Cultural, Eventos y Recitales"
+    />
+    <meta
+      property="og:description"
+      content="¿Buscás qué hacer en Mendoza Capital y Gran Mendoza? Consultá la agenda completa de eventos, recitales, obras de teatro, sunsets y salidas en Ciudad, Godoy Cruz y Luján."
+    />
+    <link
+      rel="preconnect"
+      href="https://firebasestorage.googleapis.com"
+      crossorigin
+    />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <!-- Tipografías: no bloquean el primer render (se aplican al llegar) -->
@@ -23,7 +33,10 @@
       rel="preload"
       as="style"
       href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap"
-      onload="this.onload=null;this.rel='stylesheet'"
+      onload="
+        this.onload = null;
+        this.rel = 'stylesheet';
+      "
     />
     <noscript>
       <link
@@ -260,7 +273,9 @@
             </div>
 
             <div class="form-group">
-              <label for="event-image">Flyer / Banner del Evento (Imagen)</label>
+              <label for="event-image"
+                >Flyer / Banner del Evento (Imagen)</label
+              >
               <input
                 type="file"
                 id="event-image"
@@ -320,11 +335,11 @@
             </div>
 
             <div class="form-group">
-              <label for="event-desc">Pequeña Descripción</label>
+              <label for="event-desc">Descripción</label>
               <textarea
                 id="event-desc"
                 class="form-control"
-                placeholder="Detalles principales del evento..."
+                placeholder="Descripción del evento..."
                 required
                 maxlength="300"
               ></textarea>
@@ -339,13 +354,9 @@
                   class="form-control"
                   required
                 />
-                <p
-                  id="fecha-hint-gratuito"
-                  class="plan-hint"
-                  style="display: none"
-                >
-                  Plan gratuito: la fecha debe ser al menos 2 días después de
-                  hoy.
+                <p id="fecha-hint-gratuito" class="plan-hint" style="flex: 1">
+                  Plan gratuito: la fecha debe ser al menos 2 días antes del
+                  evento para garantizar la difusión en Whatsapp.
                 </p>
               </div>
               <div class="form-group">
@@ -433,14 +444,21 @@
             </div>
 
             <div class="form-group">
-              <span class="field-label" id="event-price-type-label">Precio de la entrada</span>
+              <span class="field-label" id="event-price-type-label"
+                >Precio de la entrada</span
+              >
               <div
                 class="opciones-precio"
                 role="radiogroup"
                 aria-labelledby="event-price-type-label"
               >
                 <label class="opcion-precio"
-                  ><input type="radio" name="event-price-type" value="fijo" required />
+                  ><input
+                    type="radio"
+                    name="event-price-type"
+                    value="fijo"
+                    required
+                  />
                   <span>Precio fijo</span></label
                 >
                 <label class="opcion-precio"
@@ -448,7 +466,11 @@
                   <span>Desde…</span></label
                 >
                 <label class="opcion-precio"
-                  ><input type="radio" name="event-price-type" value="gratuito" />
+                  ><input
+                    type="radio"
+                    name="event-price-type"
+                    value="gratuito"
+                  />
                   <span>Gratuita</span></label
                 >
                 <label class="opcion-precio"
@@ -459,7 +481,9 @@
             </div>
 
             <div class="form-group" id="price-value-group" hidden>
-              <label for="event-price-value" id="price-value-label">¿Cuánto cuesta la entrada?</label>
+              <label for="event-price-value" id="price-value-label"
+                >¿Cuánto cuesta la entrada?</label
+              >
               <div class="input-prefix">
                 <span aria-hidden="true">$</span>
                 <input
@@ -485,19 +509,29 @@
                 autocomplete="off"
                 placeholder="Ej: alimento no perecedero"
               />
-              <p class="plan-hint">Escribilo como quieras que lo lea la gente.</p>
+              <p class="plan-hint">
+                Escribilo como quieras que lo lea la gente.
+              </p>
             </div>
 
-            <div class="entradas-box" role="group" aria-labelledby="event-contact-titulo">
+            <div
+              class="entradas-box"
+              role="group"
+              aria-labelledby="event-contact-titulo"
+            >
               <div class="entradas-head">
                 <span class="entradas-icono" aria-hidden="true"
                   ><i class="fa-solid fa-ticket"></i
                 ></span>
                 <div>
-                  <h4 id="event-contact-titulo">¿Cómo consigue la gente su entrada?</h4>
+                  <h4 id="event-contact-titulo">
+                    ¿Cómo consigue la gente su entrada?
+                  </h4>
                   <p class="entradas-aviso">
                     Estos datos se publican junto al evento y
-                    <strong>es ahí donde la gente va a conseguir su entrada</strong>
+                    <strong
+                      >es ahí donde la gente va a conseguir su entrada</strong
+                    >
                     o a consultar. Completá <strong>al menos uno</strong>: con
                     uno alcanza.
                   </p>
