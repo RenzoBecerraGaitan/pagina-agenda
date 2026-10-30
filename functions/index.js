@@ -9,7 +9,7 @@ const { crearObtenerLinkGrupo } = require("./grupos");
 
 admin.initializeApp();
 const db = admin.firestore();
-const obtenerLinkGrupo = crearObtenerLinkGrupo(db);
+const linkGrupo = crearObtenerLinkGrupo(db);
 
 // Región de Firestore (Santiago): triggers de base de datos y función del admin.
 const REGION_FIRESTORE = "southamerica-west1";
