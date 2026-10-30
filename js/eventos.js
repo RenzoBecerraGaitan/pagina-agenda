@@ -74,7 +74,7 @@ export const PLANES = [
     precio: null,
     beneficios: [
       "Publicación en la página web.",
-      "Difusión el mismo día del evento en los grupos de WhatsApp de tu zona.",
+      "Difusión garantizada el mismo día del evento en los grupos de WhatsApp de tu zona.",
     ],
     requisito:
       "⚠️ Requisito: Los eventos deben cargarse con un mínimo de 2 días de anticipación a su realización para garantizar su procesamiento.",
@@ -87,7 +87,7 @@ export const PLANES = [
     titulo: "⭐ Plan Destacado — $10.000",
     precio: 10000,
     beneficios: [
-      "Publicación prioritaria en los grupos de WhatsApp de tu zona.",
+      "Publicación prioritaria y anticipada en los grupos de WhatsApp de tu zona.",
       "Ubicación prioritaria en la web como Evento Destacado (ordenados por fecha más próxima).",
       "Difusión gratuita adicional el día del evento.",
     ],
@@ -100,7 +100,7 @@ export const PLANES = [
     titulo: "🚀 Plan Premium + Instagram — $15.000",
     precio: 15000,
     beneficios: [
-      "Publicación prioritaria en grupos de WhatsApp e Instagram de tu zona.",
+      "Publicación prioritaria y anticipada en grupos de WhatsApp e Instagram de tu zona.",
       "Ubicación prioritaria en la web como Evento Destacado (ordenados por fecha más próxima).",
       "Difusión gratuita adicional el día del evento.",
     ],
