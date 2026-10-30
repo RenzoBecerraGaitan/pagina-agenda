@@ -9,7 +9,7 @@ const { crearObtenerLinkGrupo } = require("./grupos");
 
 admin.initializeApp();
 const db = admin.firestore();
-const linkGrupo = crearObtenerLinkGrupo(db);
+const obtenerLinkGrupo = crearObtenerLinkGrupo(db);
 
 // Región de Firestore (Santiago): triggers de base de datos y función del admin.
 const REGION_FIRESTORE = "southamerica-west1";
@@ -217,6 +217,7 @@ function describirErrorMake(error) {
  */
 async function enviarAMake(url, id, data, extra = {}) {
   try {
+    const urlGrupo = await obtenerLinkGrupo(data.ubicacion);
     await axios.post(
       url,
       {
@@ -238,8 +239,8 @@ async function enviarAMake(url, id, data, extra = {}) {
         imagenUrl: data.imagenUrl || "",
         destacado: data.destacado || false,
         plan: data.plan || "",
-        linkGrupo,
-        captionWhatsapp: captionWhatsapp(data, linkGrupo),
+        linkGrupo: urlGrupo,
+        captionWhatsapp: captionWhatsapp(data, urlGrupo),
         captionInstagram: captionInstagram(data),
         ...extra,
       },
