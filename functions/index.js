@@ -36,7 +36,7 @@ const ADMIN_EMAILS = ["renzobecerragaitan@gmail.com", "cerezoli387@gmail.com"];
 // y si Make falla se reintenta en la hora siguiente. Nunca se repite un evento
 // porque se marca como publicado. Para que salga UNA sola vez al día,
 // cambiar por "0 12 * * *".
-const CRON_EVENTOS_DEL_DIA = "0 12-20 * * *";
+const CRON_EVENTOS_DEL_DIA = "0 12 * * *";
 
 // Fecha de hoy en Mendoza (AAAA-MM-DD). toISOString() usaría UTC.
 function fechaHoyMendoza() {
